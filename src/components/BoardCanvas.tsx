@@ -150,11 +150,10 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         activePointerIdRef.current = event.pointerId;
         event.currentTarget.setPointerCapture(event.pointerId);
       } else {
-        const nextSelection = findSelectionAtPoint(point);
-        const selectedAgain = isSameSelection(currentSelection, nextSelection);
+        const nextSelection = findSelectionAtPoint(point, true);
         selectionRef.current = nextSelection;
 
-        if (selectedAgain && nextSelection) {
+        if (nextSelection) {
           dragRef.current = {
             selection: nextSelection,
             pointerStart: point,
@@ -304,7 +303,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
             event.currentTarget.style.cursor = "nwse-resize";
           } else if (hoveredHandle === "top-right" || hoveredHandle === "bottom-left") {
             event.currentTarget.style.cursor = "nesw-resize";
-          } else if (findSelectionAtPoint(point)) {
+          } else if (findSelectionAtPoint(point, true)) {
             event.currentTarget.style.cursor = "move";
           } else {
             event.currentTarget.style.cursor = "default";
@@ -463,7 +462,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     }
   };
 
-  const findSelectionAtPoint = (point: Point): Selection | null => {
+  const findSelectionAtPoint = (point: Point, useBounds = false): Selection | null => {
     const context = canvasRef.current?.getContext("2d");
 
     if (!context) {
@@ -477,9 +476,19 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         continue;
       }
 
-      const isHit = record.kind === "stroke"
-        ? isPointOnStroke(point, record.value)
-        : isPointOnElement(context, point, record.value);
+      let isHit = false;
+      if (useBounds) {
+        const bounds = getSelectionBounds(context, record);
+        const hitPadding = 4;
+        isHit = point.x >= bounds.left - hitPadding &&
+                point.x <= bounds.right + hitPadding &&
+                point.y >= bounds.top - hitPadding &&
+                point.y <= bounds.bottom + hitPadding;
+      } else {
+        isHit = record.kind === "stroke"
+          ? isPointOnStroke(point, record.value)
+          : isPointOnElement(context, point, record.value);
+      }
 
       if (isHit) {
         return record;
@@ -496,7 +505,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   ): ResizeHandle | null => {
     const bounds = getSelectionBounds(context, selection);
     const padding = 6;
-    const handleSize = 8;
+    const handleHitSize = 16;
     const left = bounds.left - padding;
     const right = bounds.right + padding;
     const top = bounds.top - padding;
@@ -511,10 +520,10 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
     for (const handle of handles) {
       if (
-        point.x >= handle.x - handleSize / 2 &&
-        point.x <= handle.x + handleSize / 2 &&
-        point.y >= handle.y - handleSize / 2 &&
-        point.y <= handle.y + handleSize / 2
+        point.x >= handle.x - handleHitSize / 2 &&
+        point.x <= handle.x + handleHitSize / 2 &&
+        point.y >= handle.y - handleHitSize / 2 &&
+        point.y <= handle.y + handleHitSize / 2
       ) {
         return handle.type;
       }
@@ -995,11 +1004,13 @@ function drawSelection(context: CanvasRenderingContext2D, selection: Selection) 
   const width = bounds.right - bounds.left + padding * 2;
   const height = bounds.bottom - bounds.top + padding * 2;
 
-  context.strokeRect(left, top, width, height);
+  context.beginPath();
+  context.rect(left, top, width, height);
+  context.stroke();
 
   context.setLineDash([]);
   context.fillStyle = "#ffffff";
-  const handleSize = 8;
+  const handleSize = 10;
   const right = left + width;
   const bottom = top + height;
 
@@ -1011,8 +1022,10 @@ function drawSelection(context: CanvasRenderingContext2D, selection: Selection) 
   ];
 
   for (const handle of handles) {
-    context.fillRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
-    context.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+    context.beginPath();
+    context.rect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+    context.fill();
+    context.stroke();
   }
 
   context.restore();
