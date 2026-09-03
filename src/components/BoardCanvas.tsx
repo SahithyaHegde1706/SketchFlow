@@ -1,22 +1,35 @@
 "use client";
 
+import type { PointerEvent } from "react";
 import { useEffect, useRef } from "react";
-
-type Point = {
-  x: number;
-  y: number;
-};
-
-type Stroke = Point[];
+import type {
+  FreehandStroke,
+  Point,
+  RectangleElement,
+  Tool,
+  WhiteboardElement,
+} from "@/components/whiteboard/types";
 
 const STROKE_COLOR = "#0f172a";
 const STROKE_WIDTH = 3;
 
-export function BoardCanvas() {
+type BoardCanvasProps = {
+  activeTool: Tool;
+};
+
+export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const strokesRef = useRef<Stroke[]>([]);
-  const activeStrokeRef = useRef<Stroke | null>(null);
+  const strokesRef = useRef<FreehandStroke[]>([]);
+  const elementsRef = useRef<WhiteboardElement[]>([]);
+  const activeStrokeRef = useRef<FreehandStroke | null>(null);
+  const activeRectangleRef = useRef<RectangleElement | null>(null);
+  const activeRectangleStartRef = useRef<Point | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
+  const activeToolRef = useRef(activeTool);
+
+  useEffect(() => {
+    activeToolRef.current = activeTool;
+  }, [activeTool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -27,26 +40,16 @@ export function BoardCanvas() {
 
     const resizeCanvas = () => {
       const bounds = canvas.getBoundingClientRect();
-      const devicePixelRatio = window.devicePixelRatio || 1;
       const context = canvas.getContext("2d");
 
       if (!context || bounds.width === 0 || bounds.height === 0) {
         return;
       }
 
+      const devicePixelRatio = window.devicePixelRatio || 1;
       canvas.width = Math.round(bounds.width * devicePixelRatio);
       canvas.height = Math.round(bounds.height * devicePixelRatio);
-      context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      context.fillStyle = "#ffffff";
-      context.fillRect(0, 0, bounds.width, bounds.height);
-      context.strokeStyle = STROKE_COLOR;
-      context.lineWidth = STROKE_WIDTH;
-      context.lineCap = "round";
-      context.lineJoin = "round";
-
-      for (const stroke of strokesRef.current) {
-        drawStroke(context, stroke);
-      }
+      renderCanvas(canvas, strokesRef.current, elementsRef.current, activeRectangleRef.current);
     };
 
     const resizeObserver = new ResizeObserver(resizeCanvas);
@@ -60,7 +63,7 @@ export function BoardCanvas() {
     };
   }, []);
 
-  const getPoint = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
+  const getPoint = (event: PointerEvent<HTMLCanvasElement>): Point => {
     const bounds = event.currentTarget.getBoundingClientRect();
 
     return {
@@ -69,67 +72,75 @@ export function BoardCanvas() {
     };
   };
 
-  const drawSegment = (from: Point, to: Point) => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-
-    if (!canvas || !context) {
-      return;
-    }
-
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-    context.strokeStyle = STROKE_COLOR;
-    context.lineWidth = STROKE_WIDTH;
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.beginPath();
-    context.moveTo(from.x, from.y);
-    context.lineTo(to.x, to.y);
-    context.stroke();
-  };
-
-  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
       return;
     }
 
     const point = getPoint(event);
-    const stroke = [point];
-    activeStrokeRef.current = stroke;
     activePointerIdRef.current = event.pointerId;
-    strokesRef.current.push(stroke);
     event.currentTarget.setPointerCapture(event.pointerId);
+
+    if (activeToolRef.current === "rectangle") {
+      activeRectangleStartRef.current = point;
+      activeRectangleRef.current = createRectangle(point, point);
+    } else {
+      const stroke = [point];
+      activeStrokeRef.current = stroke;
+      strokesRef.current.push(stroke);
+    }
+
+    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, activeRectangleRef.current);
   };
 
-  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     if (activePointerIdRef.current !== event.pointerId) {
       return;
     }
 
-    const stroke = activeStrokeRef.current;
-    const previousPoint = stroke?.at(-1);
     const point = getPoint(event);
 
-    if (!stroke || !previousPoint) {
+    if (activeToolRef.current === "rectangle") {
+      const rectangle = activeRectangleRef.current;
+      const start = activeRectangleStartRef.current;
+
+      if (rectangle && start) {
+        activeRectangleRef.current = createRectangle(start, point);
+      }
+    } else {
+      const stroke = activeStrokeRef.current;
+
+      if (stroke) {
+        stroke.push(point);
+      }
+    }
+
+    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, activeRectangleRef.current);
+  };
+
+  const stopDrawing = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (activePointerIdRef.current !== event.pointerId) {
       return;
     }
 
-    stroke.push(point);
-    drawSegment(previousPoint, point);
-  };
+    if (activeToolRef.current === "rectangle") {
+      const rectangle = activeRectangleRef.current;
 
-  const stopDrawing = (event: React.PointerEvent<HTMLCanvasElement>) => {
-    if (activePointerIdRef.current !== event.pointerId) {
-      return;
+      if (rectangle && rectangle.width > 0 && rectangle.height > 0) {
+        elementsRef.current.push(rectangle);
+      }
+      activeRectangleRef.current = null;
+      activeRectangleStartRef.current = null;
+    } else {
+      activeStrokeRef.current = null;
     }
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
 
-    activeStrokeRef.current = null;
     activePointerIdRef.current = null;
+    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null);
   };
 
   return (
@@ -151,13 +162,66 @@ export function BoardCanvas() {
   );
 }
 
-function drawStroke(context: CanvasRenderingContext2D, stroke: Stroke) {
+function createRectangle(start: Point, end: Point): RectangleElement {
+  return {
+    id: crypto.randomUUID(),
+    type: "rectangle",
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+    strokeColor: STROKE_COLOR,
+    strokeWidth: STROKE_WIDTH,
+  };
+}
+
+function renderCanvas(
+  canvas: HTMLCanvasElement | null,
+  strokes: FreehandStroke[],
+  elements: WhiteboardElement[],
+  preview: RectangleElement | null,
+) {
+  if (!canvas) {
+    return;
+  }
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    return;
+  }
+
+  const bounds = canvas.getBoundingClientRect();
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  context.clearRect(0, 0, bounds.width, bounds.height);
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, bounds.width, bounds.height);
+
+  for (const stroke of strokes) {
+    drawStroke(context, stroke);
+  }
+
+  for (const element of elements) {
+    drawRectangle(context, element);
+  }
+
+  if (preview) {
+    drawRectangle(context, preview);
+  }
+}
+
+function drawStroke(context: CanvasRenderingContext2D, stroke: FreehandStroke) {
   const firstPoint = stroke[0];
 
   if (!firstPoint) {
     return;
   }
 
+  context.strokeStyle = STROKE_COLOR;
+  context.lineWidth = STROKE_WIDTH;
+  context.lineCap = "round";
+  context.lineJoin = "round";
   context.beginPath();
   context.moveTo(firstPoint.x, firstPoint.y);
 
@@ -166,4 +230,12 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: Stroke) {
   }
 
   context.stroke();
+}
+
+function drawRectangle(context: CanvasRenderingContext2D, rectangle: RectangleElement) {
+  context.strokeStyle = rectangle.strokeColor;
+  context.lineWidth = rectangle.strokeWidth;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
 }
