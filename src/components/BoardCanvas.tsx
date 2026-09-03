@@ -4,6 +4,7 @@ import type { PointerEvent } from "react";
 import { useEffect, useRef } from "react";
 import type {
   FreehandStroke,
+  ArrowElement,
   CircleElement,
   Point,
   RectangleElement,
@@ -27,6 +28,8 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const activeRectangleStartRef = useRef<Point | null>(null);
   const activeCircleRef = useRef<CircleElement | null>(null);
   const activeCircleStartRef = useRef<Point | null>(null);
+  const activeArrowRef = useRef<ArrowElement | null>(null);
+  const activeArrowStartRef = useRef<Point | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
   const activeToolRef = useRef(activeTool);
 
@@ -58,6 +61,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         elementsRef.current,
         activeRectangleRef.current,
         activeCircleRef.current,
+        activeArrowRef.current,
       );
     };
 
@@ -96,6 +100,9 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     } else if (activeToolRef.current === "circle") {
       activeCircleStartRef.current = point;
       activeCircleRef.current = createCircle(point, point);
+    } else if (activeToolRef.current === "arrow") {
+      activeArrowStartRef.current = point;
+      activeArrowRef.current = createArrow(point, point);
     } else {
       const stroke = [point];
       activeStrokeRef.current = stroke;
@@ -108,6 +115,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       elementsRef.current,
       activeRectangleRef.current,
       activeCircleRef.current,
+      activeArrowRef.current,
     );
   };
 
@@ -132,6 +140,13 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       if (circle && start) {
         activeCircleRef.current = createCircle(start, point);
       }
+    } else if (activeToolRef.current === "arrow") {
+      const arrow = activeArrowRef.current;
+      const start = activeArrowStartRef.current;
+
+      if (arrow && start) {
+        activeArrowRef.current = createArrow(start, point);
+      }
     } else {
       const stroke = activeStrokeRef.current;
 
@@ -146,6 +161,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       elementsRef.current,
       activeRectangleRef.current,
       activeCircleRef.current,
+      activeArrowRef.current,
     );
   };
 
@@ -170,6 +186,14 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       }
       activeCircleRef.current = null;
       activeCircleStartRef.current = null;
+      } else if (activeToolRef.current === "arrow") {
+        const arrow = activeArrowRef.current;
+
+        if (arrow && (arrow.startX !== arrow.endX || arrow.startY !== arrow.endY)) {
+          elementsRef.current.push(arrow);
+        }
+        activeArrowRef.current = null;
+        activeArrowStartRef.current = null;
     } else {
       activeStrokeRef.current = null;
     }
@@ -179,7 +203,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     }
 
     activePointerIdRef.current = null;
-    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null);
+    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
   };
 
   return (
@@ -227,12 +251,26 @@ function createCircle(start: Point, end: Point): CircleElement {
   };
 }
 
+function createArrow(start: Point, end: Point): ArrowElement {
+  return {
+    id: crypto.randomUUID(),
+    type: "arrow",
+    startX: start.x,
+    startY: start.y,
+    endX: end.x,
+    endY: end.y,
+    strokeColor: STROKE_COLOR,
+    strokeWidth: STROKE_WIDTH,
+  };
+}
+
 function renderCanvas(
   canvas: HTMLCanvasElement | null,
   strokes: FreehandStroke[],
   elements: WhiteboardElement[],
   rectanglePreview: RectangleElement | null,
   circlePreview: CircleElement | null,
+  arrowPreview: ArrowElement | null,
 ) {
   if (!canvas) {
     return;
@@ -258,8 +296,10 @@ function renderCanvas(
   for (const element of elements) {
     if (element.type === "rectangle") {
       drawRectangle(context, element);
-    } else {
+    } else if (element.type === "circle") {
       drawCircle(context, element);
+    } else {
+      drawArrow(context, element);
     }
   }
 
@@ -269,6 +309,10 @@ function renderCanvas(
 
   if (circlePreview) {
     drawCircle(context, circlePreview);
+  }
+
+  if (arrowPreview) {
+    drawArrow(context, arrowPreview);
   }
 }
 
@@ -315,6 +359,30 @@ function drawCircle(context: CanvasRenderingContext2D, circle: CircleElement) {
     0,
     0,
     Math.PI * 2,
+  );
+  context.stroke();
+}
+
+function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement) {
+  const angle = Math.atan2(arrow.endY - arrow.startY, arrow.endX - arrow.startX);
+  const arrowheadLength = 12;
+  const arrowheadAngle = Math.PI / 7;
+
+  context.strokeStyle = arrow.strokeColor;
+  context.lineWidth = arrow.strokeWidth;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+  context.moveTo(arrow.startX, arrow.startY);
+  context.lineTo(arrow.endX, arrow.endY);
+  context.moveTo(
+    arrow.endX - arrowheadLength * Math.cos(angle - arrowheadAngle),
+    arrow.endY - arrowheadLength * Math.sin(angle - arrowheadAngle),
+  );
+  context.lineTo(arrow.endX, arrow.endY);
+  context.lineTo(
+    arrow.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
+    arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
   );
   context.stroke();
 }

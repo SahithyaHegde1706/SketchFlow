@@ -27,7 +27,18 @@ export type CircleElement = {
   strokeWidth: number;
 };
 
-export type WhiteboardElement = RectangleElement | CircleElement;
+export type ArrowElement = {
+  id: string;
+  type: "arrow";
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  strokeColor: string;
+  strokeWidth: number;
+};
+
+export type WhiteboardElement = RectangleElement | CircleElement | ArrowElement;
 
 export type Tool =
   | "select"
