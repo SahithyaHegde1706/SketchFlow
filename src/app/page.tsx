@@ -1,8 +1,17 @@
+import { BoardCanvas } from "@/components/BoardCanvas";
+import { BoardHeader } from "@/components/BoardHeader";
+import { ToolRail } from "@/components/ToolRail";
+import { ZoomControls } from "@/components/ZoomControls";
+
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-2 px-6 text-center">
-      <h1 className="text-4xl font-semibold tracking-tight">SketchFlow</h1>
-      <p className="text-lg text-zinc-600">Draw. Think. Collaborate.</p>
+    <main className="flex h-dvh min-h-150 flex-col overflow-hidden bg-slate-50 text-slate-950">
+      <BoardHeader />
+      <div className="relative flex min-h-0 flex-1">
+        <ToolRail />
+        <BoardCanvas />
+        <ZoomControls />
+      </div>
     </main>
   );
 }
