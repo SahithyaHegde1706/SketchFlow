@@ -33,10 +33,14 @@ type CreationRecord =
   | { kind: "stroke"; value: FreehandStroke }
   | { kind: "element"; value: WhiteboardElement };
 
+type ResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
 type DragState = {
   selection: Selection;
   pointerStart: Point;
   original: FreehandStroke | WhiteboardElement;
+  type: "move" | "resize";
+  handle?: ResizeHandle;
 };
 
 export function BoardCanvas({ activeTool }: BoardCanvasProps) {
@@ -127,20 +131,41 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     const point = getPoint(event);
 
     if (activeTool === "select") {
-      const nextSelection = findSelectionAtPoint(point);
-      const selectedAgain = isSameSelection(selectionRef.current, nextSelection);
-      selectionRef.current = nextSelection;
+      const currentSelection = selectionRef.current;
+      const context = canvasRef.current?.getContext("2d");
 
-      if (selectedAgain && nextSelection) {
+      let clickedHandle: ResizeHandle | null = null;
+      if (currentSelection && context) {
+        clickedHandle = findResizeHandleAtPoint(context, point, currentSelection);
+      }
+
+      if (clickedHandle && currentSelection) {
         dragRef.current = {
-          selection: nextSelection,
+          selection: currentSelection,
           pointerStart: point,
-          original: cloneSelectionValue(nextSelection),
+          original: cloneSelectionValue(currentSelection),
+          type: "resize",
+          handle: clickedHandle,
         };
         activePointerIdRef.current = event.pointerId;
         event.currentTarget.setPointerCapture(event.pointerId);
       } else {
-        dragRef.current = null;
+        const nextSelection = findSelectionAtPoint(point);
+        const selectedAgain = isSameSelection(currentSelection, nextSelection);
+        selectionRef.current = nextSelection;
+
+        if (selectedAgain && nextSelection) {
+          dragRef.current = {
+            selection: nextSelection,
+            pointerStart: point,
+            original: cloneSelectionValue(nextSelection),
+            type: "move",
+          };
+          activePointerIdRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } else {
+          dragRef.current = null;
+        }
       }
 
       renderCanvas(
@@ -267,17 +292,48 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    const point = getPoint(event);
+
     if (activePointerIdRef.current !== event.pointerId) {
+      if (activeTool === "select") {
+        const currentSelection = selectionRef.current;
+        const context = canvasRef.current?.getContext("2d");
+        if (currentSelection && context) {
+          const hoveredHandle = findResizeHandleAtPoint(context, point, currentSelection);
+          if (hoveredHandle === "top-left" || hoveredHandle === "bottom-right") {
+            event.currentTarget.style.cursor = "nwse-resize";
+          } else if (hoveredHandle === "top-right" || hoveredHandle === "bottom-left") {
+            event.currentTarget.style.cursor = "nesw-resize";
+          } else if (findSelectionAtPoint(point)) {
+            event.currentTarget.style.cursor = "move";
+          } else {
+            event.currentTarget.style.cursor = "default";
+          }
+        } else {
+          event.currentTarget.style.cursor = "default";
+        }
+      } else {
+        event.currentTarget.style.cursor = "";
+      }
       return;
     }
-
-    const point = getPoint(event);
 
     if (activeTool === "select") {
       const drag = dragRef.current;
 
       if (drag) {
-        moveSelection(drag.selection, drag.original, point.x - drag.pointerStart.x, point.y - drag.pointerStart.y);
+        if (drag.type === "resize" && drag.handle) {
+          resizeSelection(
+            drag.selection,
+            drag.original,
+            point.x - drag.pointerStart.x,
+            point.y - drag.pointerStart.y,
+            drag.handle,
+            canvasRef.current?.getContext("2d") ?? undefined,
+          );
+        } else {
+          moveSelection(drag.selection, drag.original, point.x - drag.pointerStart.x, point.y - drag.pointerStart.y);
+        }
         renderCanvas(
           canvasRef.current,
           strokesRef.current,
@@ -427,6 +483,40 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
       if (isHit) {
         return record;
+      }
+    }
+
+    return null;
+  };
+
+  const findResizeHandleAtPoint = (
+    context: CanvasRenderingContext2D,
+    point: Point,
+    selection: Selection,
+  ): ResizeHandle | null => {
+    const bounds = getSelectionBounds(context, selection);
+    const padding = 6;
+    const handleSize = 8;
+    const left = bounds.left - padding;
+    const right = bounds.right + padding;
+    const top = bounds.top - padding;
+    const bottom = bounds.bottom + padding;
+
+    const handles: { type: ResizeHandle; x: number; y: number }[] = [
+      { type: "top-left", x: left, y: top },
+      { type: "top-right", x: right, y: top },
+      { type: "bottom-left", x: left, y: bottom },
+      { type: "bottom-right", x: right, y: bottom },
+    ];
+
+    for (const handle of handles) {
+      if (
+        point.x >= handle.x - handleSize / 2 &&
+        point.x <= handle.x + handleSize / 2 &&
+        point.y >= handle.y - handleSize / 2 &&
+        point.y <= handle.y + handleSize / 2
+      ) {
+        return handle.type;
       }
     }
 
@@ -729,6 +819,161 @@ function moveSelection(
   }
 }
 
+function resizeSelection(
+  selection: Selection,
+  original: FreehandStroke | WhiteboardElement,
+  deltaX: number,
+  deltaY: number,
+  handle: ResizeHandle,
+  context?: CanvasRenderingContext2D,
+) {
+  if (selection.kind === "stroke" && Array.isArray(original)) {
+    const originalBounds = getStrokeBounds(original);
+    let newLeft = originalBounds.left;
+    let newTop = originalBounds.top;
+    let newRight = originalBounds.right;
+    let newBottom = originalBounds.bottom;
+    
+    if (handle.includes("left")) {
+      newLeft = originalBounds.left + deltaX;
+    } else if (handle.includes("right")) {
+      newRight = originalBounds.right + deltaX;
+    }
+    if (handle.includes("top")) {
+      newTop = originalBounds.top + deltaY;
+    } else if (handle.includes("bottom")) {
+      newBottom = originalBounds.bottom + deltaY;
+    }
+
+    const origWidth = Math.max(0.001, originalBounds.right - originalBounds.left);
+    const origHeight = Math.max(0.001, originalBounds.bottom - originalBounds.top);
+
+    let scaleX = (newRight - newLeft) / origWidth;
+    let scaleY = (newBottom - newTop) / origHeight;
+    
+    if (Math.abs(scaleX) < 0.01) scaleX = 0.01 * (scaleX < 0 ? -1 : 1);
+    if (Math.abs(scaleY) < 0.01) scaleY = 0.01 * (scaleY < 0 ? -1 : 1);
+
+    selection.value.splice(
+      0,
+      selection.value.length,
+      ...original.map((point) => ({
+        x: newLeft + (point.x - originalBounds.left) * scaleX,
+        y: newTop + (point.y - originalBounds.top) * scaleY,
+      })),
+    );
+    return;
+  }
+
+  if (selection.kind !== "element" || Array.isArray(original)) {
+    return;
+  }
+
+  if ((selection.value.type === "rectangle" && original.type === "rectangle") ||
+      (selection.value.type === "circle" && original.type === "circle")) {
+    let newLeft = original.x;
+    let newTop = original.y;
+    let newRight = original.x + original.width;
+    let newBottom = original.y + original.height;
+
+    if (handle.includes("left")) {
+      newLeft = original.x + deltaX;
+    } else if (handle.includes("right")) {
+      newRight = original.x + original.width + deltaX;
+    }
+    if (handle.includes("top")) {
+      newTop = original.y + deltaY;
+    } else if (handle.includes("bottom")) {
+      newBottom = original.y + original.height + deltaY;
+    }
+
+    selection.value.x = Math.min(newLeft, newRight);
+    selection.value.y = Math.min(newTop, newBottom);
+    selection.value.width = Math.max(1, Math.abs(newRight - newLeft));
+    selection.value.height = Math.max(1, Math.abs(newBottom - newTop));
+  } else if (selection.value.type === "arrow" && original.type === "arrow") {
+    let origBounds: Bounds;
+    if (context) {
+       origBounds = getSelectionBounds(context, { kind: "element", value: original });
+    } else {
+       origBounds = getBounds([
+          { x: original.startX, y: original.startY },
+          { x: original.endX, y: original.endY },
+       ]);
+    }
+
+    let nLeft = origBounds.left;
+    let nTop = origBounds.top;
+    let nRight = origBounds.right;
+    let nBottom = origBounds.bottom;
+
+    if (handle.includes("left")) {
+      nLeft = origBounds.left + deltaX;
+    } else if (handle.includes("right")) {
+      nRight = origBounds.right + deltaX;
+    }
+    if (handle.includes("top")) {
+      nTop = origBounds.top + deltaY;
+    } else if (handle.includes("bottom")) {
+      nBottom = origBounds.bottom + deltaY;
+    }
+
+    const origWidth = Math.max(0.001, origBounds.right - origBounds.left);
+    const origHeight = Math.max(0.001, origBounds.bottom - origBounds.top);
+
+    let scaleX = (nRight - nLeft) / origWidth;
+    let scaleY = (nBottom - nTop) / origHeight;
+
+    if (Math.abs(scaleX) < 0.01) scaleX = 0.01 * (scaleX < 0 ? -1 : 1);
+    if (Math.abs(scaleY) < 0.01) scaleY = 0.01 * (scaleY < 0 ? -1 : 1);
+
+    selection.value.startX = nLeft + (original.startX - origBounds.left) * scaleX;
+    selection.value.startY = nTop + (original.startY - origBounds.top) * scaleY;
+    selection.value.endX = nLeft + (original.endX - origBounds.left) * scaleX;
+    selection.value.endY = nTop + (original.endY - origBounds.top) * scaleY;
+  } else if (selection.value.type === "text" && original.type === "text") {
+    let origBounds: Bounds;
+    if (context) {
+       origBounds = getSelectionBounds(context, { kind: "element", value: original });
+    } else {
+       origBounds = { left: original.x, top: original.y - original.fontSize, right: original.x + 20, bottom: original.y };
+    }
+
+    let nLeft = origBounds.left;
+    let nTop = origBounds.top;
+    let nBottom = origBounds.bottom;
+
+    if (handle.includes("left")) {
+      nLeft = origBounds.left + deltaX;
+    }
+    if (handle.includes("top")) {
+      nTop = origBounds.top + deltaY;
+    } else if (handle.includes("bottom")) {
+      nBottom = origBounds.bottom + deltaY;
+    }
+
+    nBottom = Math.max(nTop + 1, nBottom);
+
+    const origHeight = Math.max(0.001, origBounds.bottom - origBounds.top);
+    const scaleY = (nBottom - nTop) / origHeight;
+    const newFontSize = Math.max(8, original.fontSize * scaleY);
+    
+    selection.value.fontSize = newFontSize;
+
+    if (handle.includes("left")) {
+       selection.value.x = nLeft;
+    } else {
+       selection.value.x = original.x;
+    }
+
+    if (handle.includes("top")) {
+       selection.value.y = original.y; 
+    } else {
+       selection.value.y = origBounds.top + newFontSize;
+    }
+  }
+}
+
 type Bounds = {
   left: number;
   top: number;
@@ -744,12 +989,32 @@ function drawSelection(context: CanvasRenderingContext2D, selection: Selection) 
   context.strokeStyle = "#0d9488";
   context.lineWidth = 1.5;
   context.setLineDash([5, 4]);
-  context.strokeRect(
-    bounds.left - padding,
-    bounds.top - padding,
-    bounds.right - bounds.left + padding * 2,
-    bounds.bottom - bounds.top + padding * 2,
-  );
+
+  const left = bounds.left - padding;
+  const top = bounds.top - padding;
+  const width = bounds.right - bounds.left + padding * 2;
+  const height = bounds.bottom - bounds.top + padding * 2;
+
+  context.strokeRect(left, top, width, height);
+
+  context.setLineDash([]);
+  context.fillStyle = "#ffffff";
+  const handleSize = 8;
+  const right = left + width;
+  const bottom = top + height;
+
+  const handles = [
+    { x: left, y: top },
+    { x: right, y: top },
+    { x: left, y: bottom },
+    { x: right, y: bottom },
+  ];
+
+  for (const handle of handles) {
+    context.fillRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+    context.strokeRect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+  }
+
   context.restore();
 }
 
