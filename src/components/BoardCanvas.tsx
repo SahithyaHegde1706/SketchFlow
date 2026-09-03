@@ -1,22 +1,30 @@
 "use client";
 
-import type { PointerEvent } from "react";
-import { useEffect, useRef } from "react";
+import type { ChangeEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   FreehandStroke,
   ArrowElement,
   CircleElement,
   Point,
   RectangleElement,
+  TextElement,
   Tool,
   WhiteboardElement,
 } from "@/components/whiteboard/types";
 
 const STROKE_COLOR = "#0f172a";
 const STROKE_WIDTH = 3;
+const TEXT_FONT_SIZE = 20;
 
 type BoardCanvasProps = {
   activeTool: Tool;
+};
+
+type TextEditorState = {
+  x: number;
+  y: number;
+  value: string;
 };
 
 export function BoardCanvas({ activeTool }: BoardCanvasProps) {
@@ -30,12 +38,10 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const activeCircleStartRef = useRef<Point | null>(null);
   const activeArrowRef = useRef<ArrowElement | null>(null);
   const activeArrowStartRef = useRef<Point | null>(null);
+  const textInputRef = useRef<HTMLInputElement>(null);
+  const textEditorRef = useRef<TextEditorState | null>(null);
+  const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
-  const activeToolRef = useRef(activeTool);
-
-  useEffect(() => {
-    activeToolRef.current = activeTool;
-  }, [activeTool]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -76,7 +82,9 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     };
   }, []);
 
-  const getPoint = (event: PointerEvent<HTMLCanvasElement>): Point => {
+  const getPoint = (
+    event: PointerEvent<HTMLCanvasElement> | MouseEvent<HTMLCanvasElement>,
+  ): Point => {
     const bounds = event.currentTarget.getBoundingClientRect();
 
     return {
@@ -85,8 +93,18 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     };
   };
 
+  useEffect(() => {
+    if (textEditor) {
+      textInputRef.current?.focus();
+    }
+  }, [textEditor]);
+
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
+      return;
+    }
+
+    if (activeTool === "text") {
       return;
     }
 
@@ -94,13 +112,13 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     activePointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
 
-    if (activeToolRef.current === "rectangle") {
+    if (activeTool === "rectangle") {
       activeRectangleStartRef.current = point;
       activeRectangleRef.current = createRectangle(point, point);
-    } else if (activeToolRef.current === "circle") {
+    } else if (activeTool === "circle") {
       activeCircleStartRef.current = point;
       activeCircleRef.current = createCircle(point, point);
-    } else if (activeToolRef.current === "arrow") {
+    } else if (activeTool === "arrow") {
       activeArrowStartRef.current = point;
       activeArrowRef.current = createArrow(point, point);
     } else {
@@ -119,6 +137,70 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     );
   };
 
+  const handleCanvasClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool !== "text") {
+      return;
+    }
+
+    const point = getPoint(event);
+    const editor = { x: point.x, y: point.y, value: "" };
+    textEditorRef.current = editor;
+    setTextEditor(editor);
+  };
+
+  const handleTextChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const editor = textEditorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    const nextEditor = { ...editor, value: event.target.value };
+    textEditorRef.current = nextEditor;
+    setTextEditor(nextEditor);
+  };
+
+  const cancelText = () => {
+    textEditorRef.current = null;
+    setTextEditor(null);
+  };
+
+  const commitText = () => {
+    const editor = textEditorRef.current;
+
+    if (!editor) {
+      return;
+    }
+
+    textEditorRef.current = null;
+    setTextEditor(null);
+
+    if (editor.value.trim().length === 0) {
+      return;
+    }
+
+    elementsRef.current.push({
+      id: crypto.randomUUID(),
+      type: "text",
+      x: editor.x,
+      y: editor.y,
+      text: editor.value,
+      fontSize: TEXT_FONT_SIZE,
+      strokeColor: STROKE_COLOR,
+    });
+    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
+  };
+
+  const handleTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitText();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      cancelText();
+    }
+  };
+
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     if (activePointerIdRef.current !== event.pointerId) {
       return;
@@ -126,21 +208,21 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
     const point = getPoint(event);
 
-    if (activeToolRef.current === "rectangle") {
+    if (activeTool === "rectangle") {
       const rectangle = activeRectangleRef.current;
       const start = activeRectangleStartRef.current;
 
       if (rectangle && start) {
         activeRectangleRef.current = createRectangle(start, point);
       }
-    } else if (activeToolRef.current === "circle") {
+    } else if (activeTool === "circle") {
       const circle = activeCircleRef.current;
       const start = activeCircleStartRef.current;
 
       if (circle && start) {
         activeCircleRef.current = createCircle(start, point);
       }
-    } else if (activeToolRef.current === "arrow") {
+    } else if (activeTool === "arrow") {
       const arrow = activeArrowRef.current;
       const start = activeArrowStartRef.current;
 
@@ -170,7 +252,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       return;
     }
 
-    if (activeToolRef.current === "rectangle") {
+    if (activeTool === "rectangle") {
       const rectangle = activeRectangleRef.current;
 
       if (rectangle && rectangle.width > 0 && rectangle.height > 0) {
@@ -178,7 +260,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       }
       activeRectangleRef.current = null;
       activeRectangleStartRef.current = null;
-    } else if (activeToolRef.current === "circle") {
+    } else if (activeTool === "circle") {
       const circle = activeCircleRef.current;
 
       if (circle && circle.width > 0 && circle.height > 0) {
@@ -186,7 +268,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       }
       activeCircleRef.current = null;
       activeCircleStartRef.current = null;
-      } else if (activeToolRef.current === "arrow") {
+      } else if (activeTool === "arrow") {
         const arrow = activeArrowRef.current;
 
         if (arrow && (arrow.startX !== arrow.endX || arrow.startY !== arrow.endY)) {
@@ -215,12 +297,32 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         ref={canvasRef}
         aria-label="SketchFlow drawing surface"
         className="absolute inset-0 size-full bg-white/80"
+        onClick={handleCanvasClick}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopDrawing}
         onPointerCancel={stopDrawing}
         onPointerLeave={stopDrawing}
       />
+      {textEditor && (
+        <input
+          ref={textInputRef}
+          type="text"
+          value={textEditor.value}
+          aria-label="Enter text"
+          autoComplete="off"
+          onChange={handleTextChange}
+          onKeyDown={handleTextKeyDown}
+          onBlur={commitText}
+          className="absolute z-20 rounded-lg border border-teal-300 bg-white/95 px-2 py-1 text-base text-slate-900 shadow-sm outline-none ring-2 ring-teal-100 placeholder:text-slate-400"
+          placeholder="Type here"
+          style={{
+            left: textEditor.x,
+            top: Math.max(4, textEditor.y - TEXT_FONT_SIZE),
+            width: 200,
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -298,8 +400,10 @@ function renderCanvas(
       drawRectangle(context, element);
     } else if (element.type === "circle") {
       drawCircle(context, element);
-    } else {
+    } else if (element.type === "arrow") {
       drawArrow(context, element);
+    } else {
+      drawText(context, element);
     }
   }
 
@@ -385,4 +489,11 @@ function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement) {
     arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
   );
   context.stroke();
+}
+
+function drawText(context: CanvasRenderingContext2D, text: TextElement) {
+  context.fillStyle = text.strokeColor;
+  context.font = `${text.fontSize}px Arial, sans-serif`;
+  context.textBaseline = "alphabetic";
+  context.fillText(text.text, text.x, text.y);
 }
