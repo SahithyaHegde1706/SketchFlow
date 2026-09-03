@@ -16,6 +16,7 @@ import type {
 const STROKE_COLOR = "#0f172a";
 const STROKE_WIDTH = 3;
 const TEXT_FONT_SIZE = 20;
+const ERASER_TOLERANCE = 8;
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -27,10 +28,15 @@ type TextEditorState = {
   value: string;
 };
 
+type CreationRecord =
+  | { kind: "stroke"; value: FreehandStroke }
+  | { kind: "element"; value: WhiteboardElement };
+
 export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
+  const creationOrderRef = useRef<CreationRecord[]>([]);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
@@ -109,6 +115,12 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     }
 
     const point = getPoint(event);
+
+    if (activeTool === "eraser") {
+      eraseAtPoint(point);
+      return;
+    }
+
     activePointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
 
@@ -125,6 +137,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       const stroke = [point];
       activeStrokeRef.current = stroke;
       strokesRef.current.push(stroke);
+      creationOrderRef.current.push({ kind: "stroke", value: stroke });
     }
 
     renderCanvas(
@@ -179,7 +192,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       return;
     }
 
-    elementsRef.current.push({
+    const textElement: TextElement = {
       id: crypto.randomUUID(),
       type: "text",
       x: editor.x,
@@ -187,7 +200,9 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       text: editor.value,
       fontSize: TEXT_FONT_SIZE,
       strokeColor: STROKE_COLOR,
-    });
+    };
+    elementsRef.current.push(textElement);
+    creationOrderRef.current.push({ kind: "element", value: textElement });
     renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
   };
 
@@ -257,6 +272,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
       if (rectangle && rectangle.width > 0 && rectangle.height > 0) {
         elementsRef.current.push(rectangle);
+        creationOrderRef.current.push({ kind: "element", value: rectangle });
       }
       activeRectangleRef.current = null;
       activeRectangleStartRef.current = null;
@@ -265,6 +281,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
       if (circle && circle.width > 0 && circle.height > 0) {
         elementsRef.current.push(circle);
+        creationOrderRef.current.push({ kind: "element", value: circle });
       }
       activeCircleRef.current = null;
       activeCircleStartRef.current = null;
@@ -273,6 +290,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
         if (arrow && (arrow.startX !== arrow.endX || arrow.startY !== arrow.endY)) {
           elementsRef.current.push(arrow);
+          creationOrderRef.current.push({ kind: "element", value: arrow });
         }
         activeArrowRef.current = null;
         activeArrowStartRef.current = null;
@@ -286,6 +304,39 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
     activePointerIdRef.current = null;
     renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
+  };
+
+  const eraseAtPoint = (point: Point) => {
+    const context = canvasRef.current?.getContext("2d");
+
+    if (!context) {
+      return;
+    }
+
+    for (let index = creationOrderRef.current.length - 1; index >= 0; index -= 1) {
+      const record = creationOrderRef.current[index];
+
+      if (!record) {
+        continue;
+      }
+
+      const isHit = record.kind === "stroke"
+        ? isPointOnStroke(point, record.value)
+        : isPointOnElement(context, point, record.value);
+
+      if (!isHit) {
+        continue;
+      }
+
+      if (record.kind === "stroke") {
+        removeByReference(strokesRef.current, record.value);
+      } else {
+        removeByReference(elementsRef.current, record.value);
+      }
+      creationOrderRef.current.splice(index, 1);
+      renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
+      return;
+    }
   };
 
   return (
@@ -496,4 +547,140 @@ function drawText(context: CanvasRenderingContext2D, text: TextElement) {
   context.font = `${text.fontSize}px Arial, sans-serif`;
   context.textBaseline = "alphabetic";
   context.fillText(text.text, text.x, text.y);
+}
+
+function isPointOnElement(
+  context: CanvasRenderingContext2D,
+  point: Point,
+  element: WhiteboardElement,
+) {
+  switch (element.type) {
+    case "rectangle":
+      return isPointNearRectangle(point, element);
+    case "circle":
+      return isPointNearEllipse(point, element);
+    case "arrow":
+      return isPointNearArrow(point, element);
+    case "text":
+      return isPointInTextBounds(context, point, element);
+  }
+}
+
+function isPointOnStroke(point: Point, stroke: FreehandStroke) {
+  if (stroke.length === 1) {
+    return distanceBetweenPoints(point, stroke[0] ?? point) <= ERASER_TOLERANCE;
+  }
+
+  for (let index = 1; index < stroke.length; index += 1) {
+    const start = stroke[index - 1];
+    const end = stroke[index];
+
+    if (start && end && distanceToSegment(point, start, end) <= ERASER_TOLERANCE) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isPointNearRectangle(point: Point, rectangle: RectangleElement) {
+  const left = rectangle.x;
+  const right = rectangle.x + rectangle.width;
+  const top = rectangle.y;
+  const bottom = rectangle.y + rectangle.height;
+  const edges = [
+    [{ x: left, y: top }, { x: right, y: top }],
+    [{ x: right, y: top }, { x: right, y: bottom }],
+    [{ x: right, y: bottom }, { x: left, y: bottom }],
+    [{ x: left, y: bottom }, { x: left, y: top }],
+  ] as const;
+
+  return edges.some(([start, end]) => distanceToSegment(point, start, end) <= ERASER_TOLERANCE);
+}
+
+function isPointNearEllipse(point: Point, circle: CircleElement) {
+  const radiusX = circle.width / 2;
+  const radiusY = circle.height / 2;
+
+  if (radiusX === 0 || radiusY === 0) {
+    return false;
+  }
+
+  const normalizedDistance = Math.hypot(
+    (point.x - (circle.x + radiusX)) / radiusX,
+    (point.y - (circle.y + radiusY)) / radiusY,
+  );
+
+  return Math.abs(normalizedDistance - 1) * Math.min(radiusX, radiusY) <= ERASER_TOLERANCE;
+}
+
+function isPointNearArrow(point: Point, arrow: ArrowElement) {
+  const angle = Math.atan2(arrow.endY - arrow.startY, arrow.endX - arrow.startX);
+  const arrowheadLength = 12;
+  const arrowheadAngle = Math.PI / 7;
+  const leftHead = {
+    x: arrow.endX - arrowheadLength * Math.cos(angle - arrowheadAngle),
+    y: arrow.endY - arrowheadLength * Math.sin(angle - arrowheadAngle),
+  };
+  const rightHead = {
+    x: arrow.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
+    y: arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
+  };
+
+  return [
+    [{ x: arrow.startX, y: arrow.startY }, { x: arrow.endX, y: arrow.endY }],
+    [leftHead, { x: arrow.endX, y: arrow.endY }],
+    [{ x: arrow.endX, y: arrow.endY }, rightHead],
+  ].some(([start, end]) => distanceToSegment(point, start, end) <= ERASER_TOLERANCE);
+}
+
+function isPointInTextBounds(
+  context: CanvasRenderingContext2D,
+  point: Point,
+  text: TextElement,
+) {
+  context.font = `${text.fontSize}px Arial, sans-serif`;
+  const width = context.measureText(text.text).width;
+  const padding = ERASER_TOLERANCE;
+
+  return point.x >= text.x - padding
+    && point.x <= text.x + width + padding
+    && point.y >= text.y - text.fontSize - padding
+    && point.y <= text.y + padding;
+}
+
+function distanceToSegment(point: Point, start: Point, end: Point) {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const segmentLengthSquared = deltaX * deltaX + deltaY * deltaY;
+
+  if (segmentLengthSquared === 0) {
+    return distanceBetweenPoints(point, start);
+  }
+
+  const projection = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) / segmentLengthSquared,
+    ),
+  );
+  const closestPoint = {
+    x: start.x + projection * deltaX,
+    y: start.y + projection * deltaY,
+  };
+
+  return distanceBetweenPoints(point, closestPoint);
+}
+
+function distanceBetweenPoints(first: Point, second: Point) {
+  return Math.hypot(first.x - second.x, first.y - second.y);
+}
+
+function removeByReference<T>(items: T[], item: T) {
+  const index = items.indexOf(item);
+
+  if (index >= 0) {
+    items.splice(index, 1);
+  }
 }
