@@ -33,12 +33,19 @@ type CreationRecord =
   | { kind: "stroke"; value: FreehandStroke }
   | { kind: "element"; value: WhiteboardElement };
 
+type DragState = {
+  selection: Selection;
+  pointerStart: Point;
+  original: FreehandStroke | WhiteboardElement;
+};
+
 export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
   const creationOrderRef = useRef<CreationRecord[]>([]);
   const selectionRef = useRef<Selection | null>(null);
+  const dragRef = useRef<DragState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
@@ -120,7 +127,31 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     const point = getPoint(event);
 
     if (activeTool === "select") {
-      selectAtPoint(point);
+      const nextSelection = findSelectionAtPoint(point);
+      const selectedAgain = isSameSelection(selectionRef.current, nextSelection);
+      selectionRef.current = nextSelection;
+
+      if (selectedAgain && nextSelection) {
+        dragRef.current = {
+          selection: nextSelection,
+          pointerStart: point,
+          original: cloneSelectionValue(nextSelection),
+        };
+        activePointerIdRef.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } else {
+        dragRef.current = null;
+      }
+
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        null,
+        null,
+        null,
+        selectionRef.current,
+      );
       return;
     }
 
@@ -242,6 +273,24 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
     const point = getPoint(event);
 
+    if (activeTool === "select") {
+      const drag = dragRef.current;
+
+      if (drag) {
+        moveSelection(drag.selection, drag.original, point.x - drag.pointerStart.x, point.y - drag.pointerStart.y);
+        renderCanvas(
+          canvasRef.current,
+          strokesRef.current,
+          elementsRef.current,
+          null,
+          null,
+          null,
+          selectionRef.current,
+        );
+      }
+      return;
+    }
+
     if (activeTool === "rectangle") {
       const rectangle = activeRectangleRef.current;
       const start = activeRectangleStartRef.current;
@@ -318,6 +367,24 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       activeStrokeRef.current = null;
     }
 
+    if (activeTool === "select") {
+      dragRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      activePointerIdRef.current = null;
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        null,
+        null,
+        null,
+        selectionRef.current,
+      );
+      return;
+    }
+
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -334,14 +401,18 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     );
   };
 
-  const selectAtPoint = (point: Point) => {
+  const handlePointerLeave = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (activeTool !== "select") {
+      stopDrawing(event);
+    }
+  };
+
+  const findSelectionAtPoint = (point: Point): Selection | null => {
     const context = canvasRef.current?.getContext("2d");
 
     if (!context) {
-      return;
+      return null;
     }
-
-    selectionRef.current = null;
 
     for (let index = creationOrderRef.current.length - 1; index >= 0; index -= 1) {
       const record = creationOrderRef.current[index];
@@ -355,20 +426,11 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         : isPointOnElement(context, point, record.value);
 
       if (isHit) {
-        selectionRef.current = record;
-        break;
+        return record;
       }
     }
 
-    renderCanvas(
-      canvasRef.current,
-      strokesRef.current,
-      elementsRef.current,
-      null,
-      null,
-      null,
-      selectionRef.current,
-    );
+    return null;
   };
 
   const eraseAtPoint = (point: Point) => {
@@ -426,7 +488,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={stopDrawing}
         onPointerCancel={stopDrawing}
-        onPointerLeave={stopDrawing}
+        onPointerLeave={handlePointerLeave}
       />
       {textEditor && (
         <input
@@ -625,6 +687,46 @@ function drawText(context: CanvasRenderingContext2D, text: TextElement) {
   context.font = `${text.fontSize}px Arial, sans-serif`;
   context.textBaseline = "alphabetic";
   context.fillText(text.text, text.x, text.y);
+}
+
+function isSameSelection(first: Selection | null, second: Selection | null) {
+  return first?.kind === second?.kind && first?.value === second?.value;
+}
+
+function cloneSelectionValue(selection: Selection): FreehandStroke | WhiteboardElement {
+  return selection.kind === "stroke"
+    ? selection.value.map((point) => ({ ...point }))
+    : { ...selection.value };
+}
+
+function moveSelection(
+  selection: Selection,
+  original: FreehandStroke | WhiteboardElement,
+  deltaX: number,
+  deltaY: number,
+) {
+  if (selection.kind === "stroke" && Array.isArray(original)) {
+    selection.value.splice(
+      0,
+      selection.value.length,
+      ...original.map((point) => ({ x: point.x + deltaX, y: point.y + deltaY })),
+    );
+    return;
+  }
+
+  if (selection.kind !== "element" || Array.isArray(original)) {
+    return;
+  }
+
+  if (selection.value.type === "arrow" && original.type === "arrow") {
+    selection.value.startX = original.startX + deltaX;
+    selection.value.startY = original.startY + deltaY;
+    selection.value.endX = original.endX + deltaX;
+    selection.value.endY = original.endY + deltaY;
+  } else if (selection.value.type !== "arrow" && original.type !== "arrow") {
+    selection.value.x = original.x + deltaX;
+    selection.value.y = original.y + deltaY;
+  }
 }
 
 type Bounds = {
