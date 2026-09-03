@@ -102,6 +102,56 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") {
+        return;
+      }
+
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        (event.target instanceof HTMLElement && event.target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const selection = selectionRef.current;
+      if (!selection) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (selection.kind === "stroke") {
+        removeByReference(strokesRef.current, selection.value);
+      } else {
+        removeByReference(elementsRef.current, selection.value);
+      }
+
+      removeByReference(creationOrderRef.current, selection);
+
+      selectionRef.current = null;
+      dragRef.current = null;
+      activePointerIdRef.current = null;
+
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        activeRectangleRef.current,
+        activeCircleRef.current,
+        activeArrowRef.current,
+        null,
+      );
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
+
   const getPoint = (
     event: PointerEvent<HTMLCanvasElement> | MouseEvent<HTMLCanvasElement>,
   ): Point => {
@@ -786,10 +836,6 @@ function drawText(context: CanvasRenderingContext2D, text: TextElement) {
   context.font = `${text.fontSize}px Arial, sans-serif`;
   context.textBaseline = "alphabetic";
   context.fillText(text.text, text.x, text.y);
-}
-
-function isSameSelection(first: Selection | null, second: Selection | null) {
-  return first?.kind === second?.kind && first?.value === second?.value;
 }
 
 function cloneSelectionValue(selection: Selection): FreehandStroke | WhiteboardElement {
