@@ -8,6 +8,7 @@ import type {
   CircleElement,
   Point,
   RectangleElement,
+  Selection,
   TextElement,
   Tool,
   WhiteboardElement,
@@ -37,6 +38,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
   const creationOrderRef = useRef<CreationRecord[]>([]);
+  const selectionRef = useRef<Selection | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
@@ -74,6 +76,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         activeRectangleRef.current,
         activeCircleRef.current,
         activeArrowRef.current,
+        selectionRef.current,
       );
     };
 
@@ -116,6 +119,13 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
 
     const point = getPoint(event);
 
+    if (activeTool === "select") {
+      selectAtPoint(point);
+      return;
+    }
+
+    selectionRef.current = null;
+
     if (activeTool === "eraser") {
       eraseAtPoint(point);
       return;
@@ -147,6 +157,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       activeRectangleRef.current,
       activeCircleRef.current,
       activeArrowRef.current,
+      selectionRef.current,
     );
   };
 
@@ -203,7 +214,15 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     };
     elementsRef.current.push(textElement);
     creationOrderRef.current.push({ kind: "element", value: textElement });
-    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      null,
+      null,
+      null,
+      selectionRef.current,
+    );
   };
 
   const handleTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -259,6 +278,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       activeRectangleRef.current,
       activeCircleRef.current,
       activeArrowRef.current,
+      selectionRef.current,
     );
   };
 
@@ -303,7 +323,52 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     }
 
     activePointerIdRef.current = null;
-    renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      null,
+      null,
+      null,
+      selectionRef.current,
+    );
+  };
+
+  const selectAtPoint = (point: Point) => {
+    const context = canvasRef.current?.getContext("2d");
+
+    if (!context) {
+      return;
+    }
+
+    selectionRef.current = null;
+
+    for (let index = creationOrderRef.current.length - 1; index >= 0; index -= 1) {
+      const record = creationOrderRef.current[index];
+
+      if (!record) {
+        continue;
+      }
+
+      const isHit = record.kind === "stroke"
+        ? isPointOnStroke(point, record.value)
+        : isPointOnElement(context, point, record.value);
+
+      if (isHit) {
+        selectionRef.current = record;
+        break;
+      }
+    }
+
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      null,
+      null,
+      null,
+      selectionRef.current,
+    );
   };
 
   const eraseAtPoint = (point: Point) => {
@@ -334,7 +399,15 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         removeByReference(elementsRef.current, record.value);
       }
       creationOrderRef.current.splice(index, 1);
-      renderCanvas(canvasRef.current, strokesRef.current, elementsRef.current, null, null, null);
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        null,
+        null,
+        null,
+        selectionRef.current,
+      );
       return;
     }
   };
@@ -424,6 +497,7 @@ function renderCanvas(
   rectanglePreview: RectangleElement | null,
   circlePreview: CircleElement | null,
   arrowPreview: ArrowElement | null,
+  selection: Selection | null,
 ) {
   if (!canvas) {
     return;
@@ -468,6 +542,10 @@ function renderCanvas(
 
   if (arrowPreview) {
     drawArrow(context, arrowPreview);
+  }
+
+  if (selection) {
+    drawSelection(context, selection);
   }
 }
 
@@ -547,6 +625,97 @@ function drawText(context: CanvasRenderingContext2D, text: TextElement) {
   context.font = `${text.fontSize}px Arial, sans-serif`;
   context.textBaseline = "alphabetic";
   context.fillText(text.text, text.x, text.y);
+}
+
+type Bounds = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+function drawSelection(context: CanvasRenderingContext2D, selection: Selection) {
+  const bounds = getSelectionBounds(context, selection);
+  const padding = 6;
+
+  context.save();
+  context.strokeStyle = "#0d9488";
+  context.lineWidth = 1.5;
+  context.setLineDash([5, 4]);
+  context.strokeRect(
+    bounds.left - padding,
+    bounds.top - padding,
+    bounds.right - bounds.left + padding * 2,
+    bounds.bottom - bounds.top + padding * 2,
+  );
+  context.restore();
+}
+
+function getSelectionBounds(
+  context: CanvasRenderingContext2D,
+  selection: Selection,
+): Bounds {
+  if (selection.kind === "stroke") {
+    return getStrokeBounds(selection.value);
+  }
+
+  const element = selection.value;
+
+  switch (element.type) {
+    case "rectangle":
+    case "circle":
+      return {
+        left: element.x,
+        top: element.y,
+        right: element.x + element.width,
+        bottom: element.y + element.height,
+      };
+    case "arrow": {
+      const angle = Math.atan2(element.endY - element.startY, element.endX - element.startX);
+      const arrowheadLength = 12;
+      const arrowheadAngle = Math.PI / 7;
+      const leftHead = {
+        x: element.endX - arrowheadLength * Math.cos(angle - arrowheadAngle),
+        y: element.endY - arrowheadLength * Math.sin(angle - arrowheadAngle),
+      };
+      const rightHead = {
+        x: element.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
+        y: element.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
+      };
+      return getBounds([
+        { x: element.startX, y: element.startY },
+        { x: element.endX, y: element.endY },
+        leftHead,
+        rightHead,
+      ]);
+    }
+    case "text": {
+      context.font = `${element.fontSize}px Arial, sans-serif`;
+      const width = context.measureText(element.text).width;
+      return {
+        left: element.x,
+        top: element.y - element.fontSize,
+        right: element.x + width,
+        bottom: element.y,
+      };
+    }
+  }
+}
+
+function getStrokeBounds(stroke: FreehandStroke): Bounds {
+  return getBounds(stroke.length > 0 ? stroke : [{ x: 0, y: 0 }]);
+}
+
+function getBounds(points: Point[]): Bounds {
+  return points.reduce(
+    (bounds, point) => ({
+      left: Math.min(bounds.left, point.x),
+      top: Math.min(bounds.top, point.y),
+      right: Math.max(bounds.right, point.x),
+      bottom: Math.max(bounds.bottom, point.y),
+    }),
+    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+  );
 }
 
 function isPointOnElement(
