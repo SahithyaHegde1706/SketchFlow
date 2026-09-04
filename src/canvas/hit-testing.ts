@@ -1,0 +1,169 @@
+import type {
+  ArrowElement,
+  CircleElement,
+  CreationRecord,
+  FreehandStroke,
+  Point,
+  RectangleElement,
+  Selection,
+  TextElement,
+  WhiteboardElement,
+} from "@/types/canvas";
+import { distanceBetweenPoints, distanceToSegment } from "./geometry";
+import { getSelectionBounds } from "./selection";
+
+export const ERASER_TOLERANCE = 8;
+
+export function findSelectionAtPoint(
+  context: CanvasRenderingContext2D,
+  point: Point,
+  creationOrder: CreationRecord[],
+  useBounds = false,
+): Selection | null {
+  for (let index = creationOrder.length - 1; index >= 0; index -= 1) {
+    const record = creationOrder[index];
+
+    if (!record) {
+      continue;
+    }
+
+    let isHit = false;
+    if (useBounds) {
+      const bounds = getSelectionBounds(context, record);
+      const hitPadding = 4;
+      isHit =
+        point.x >= bounds.left - hitPadding &&
+        point.x <= bounds.right + hitPadding &&
+        point.y >= bounds.top - hitPadding &&
+        point.y <= bounds.bottom + hitPadding;
+    } else {
+      isHit =
+        record.kind === "stroke"
+          ? isPointOnStroke(point, record.value)
+          : isPointOnElement(context, point, record.value);
+    }
+
+    if (isHit) {
+      return record;
+    }
+  }
+
+  return null;
+}
+
+export function isPointOnElement(
+  context: CanvasRenderingContext2D,
+  point: Point,
+  element: WhiteboardElement,
+) {
+  switch (element.type) {
+    case "rectangle":
+      return isPointNearRectangle(point, element);
+    case "circle":
+      return isPointNearEllipse(point, element);
+    case "arrow":
+      return isPointNearArrow(point, element);
+    case "text":
+      return isPointInTextBounds(context, point, element);
+  }
+}
+
+export function isPointOnStroke(point: Point, stroke: FreehandStroke) {
+  if (stroke.length === 1) {
+    return distanceBetweenPoints(point, stroke[0] ?? point) <= ERASER_TOLERANCE;
+  }
+
+  for (let index = 1; index < stroke.length; index += 1) {
+    const start = stroke[index - 1];
+    const end = stroke[index];
+
+    if (start && end && distanceToSegment(point, start, end) <= ERASER_TOLERANCE) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isPointNearRectangle(point: Point, rectangle: RectangleElement) {
+  const left = rectangle.x;
+  const right = rectangle.x + rectangle.width;
+  const top = rectangle.y;
+  const bottom = rectangle.y + rectangle.height;
+  const edges = [
+    [
+      { x: left, y: top },
+      { x: right, y: top },
+    ],
+    [
+      { x: right, y: top },
+      { x: right, y: bottom },
+    ],
+    [
+      { x: right, y: bottom },
+      { x: left, y: bottom },
+    ],
+    [
+      { x: left, y: bottom },
+      { x: left, y: top },
+    ],
+  ] as const;
+
+  return edges.some(([start, end]) => distanceToSegment(point, start, end) <= ERASER_TOLERANCE);
+}
+
+export function isPointNearEllipse(point: Point, circle: CircleElement) {
+  const radiusX = circle.width / 2;
+  const radiusY = circle.height / 2;
+
+  if (radiusX === 0 || radiusY === 0) {
+    return false;
+  }
+
+  const normalizedDistance = Math.hypot(
+    (point.x - (circle.x + radiusX)) / radiusX,
+    (point.y - (circle.y + radiusY)) / radiusY,
+  );
+
+  return Math.abs(normalizedDistance - 1) * Math.min(radiusX, radiusY) <= ERASER_TOLERANCE;
+}
+
+export function isPointNearArrow(point: Point, arrow: ArrowElement) {
+  const angle = Math.atan2(arrow.endY - arrow.startY, arrow.endX - arrow.startX);
+  const arrowheadLength = 12;
+  const arrowheadAngle = Math.PI / 7;
+  const leftHead = {
+    x: arrow.endX - arrowheadLength * Math.cos(angle - arrowheadAngle),
+    y: arrow.endY - arrowheadLength * Math.sin(angle - arrowheadAngle),
+  };
+  const rightHead = {
+    x: arrow.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
+    y: arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
+  };
+
+  return [
+    [
+      { x: arrow.startX, y: arrow.startY },
+      { x: arrow.endX, y: arrow.endY },
+    ],
+    [leftHead, { x: arrow.endX, y: arrow.endY }],
+    [{ x: arrow.endX, y: arrow.endY }, rightHead],
+  ].some(([start, end]) => distanceToSegment(point, start, end) <= ERASER_TOLERANCE);
+}
+
+export function isPointInTextBounds(
+  context: CanvasRenderingContext2D,
+  point: Point,
+  text: TextElement,
+) {
+  context.font = `${text.fontSize}px Arial, sans-serif`;
+  const width = context.measureText(text.text).width;
+  const padding = ERASER_TOLERANCE;
+
+  return (
+    point.x >= text.x - padding &&
+    point.x <= text.x + width + padding &&
+    point.y >= text.y - text.fontSize - padding &&
+    point.y <= text.y + padding
+  );
+}
