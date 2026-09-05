@@ -1,21 +1,25 @@
 import type { Bounds, Point, ResizeHandle, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
-import { getBounds, getStrokeBounds } from "./geometry";
+import { getBounds, getStrokeBounds, rotatePoint } from "./geometry";
+import { getElementCenter } from "@/editor/rotation";
 
 function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
+  let unrotatedBounds: Bounds;
+  
   switch (element.type) {
     case "rectangle":
     case "circle":
-      return {
+      unrotatedBounds = {
         left: element.x,
         top: element.y,
         right: element.x + element.width,
         bottom: element.y + element.height,
       };
+      break;
     case "arrow": {
       const angle = Math.atan2(element.endY - element.startY, element.endX - element.startX);
       const arrowheadLength = 12;
       const arrowheadAngle = Math.PI / 7;
-      return getBounds([
+      unrotatedBounds = getBounds([
         { x: element.startX, y: element.startY },
         { x: element.endX, y: element.endY },
         {
@@ -27,18 +31,34 @@ function getElementBounds(context: CanvasRenderingContext2D, element: Whiteboard
           y: element.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
         },
       ]);
+      break;
     }
     case "text": {
       context.font = `${element.fontSize}px Arial, sans-serif`;
       const width = context.measureText(element.text).width;
-      return {
+      unrotatedBounds = {
         left: element.x,
         top: element.y - element.fontSize,
         right: element.x + width,
         bottom: element.y,
       };
+      break;
     }
   }
+
+  if (element.rotation) {
+    const center = getElementCenter(element);
+    const corners = [
+      { x: unrotatedBounds.left, y: unrotatedBounds.top },
+      { x: unrotatedBounds.right, y: unrotatedBounds.top },
+      { x: unrotatedBounds.right, y: unrotatedBounds.bottom },
+      { x: unrotatedBounds.left, y: unrotatedBounds.bottom },
+    ];
+    const rotatedCorners = corners.map(corner => rotatePoint(corner, center, element.rotation!));
+    return getBounds(rotatedCorners);
+  }
+
+  return unrotatedBounds;
 }
 
 export function getSelectionBounds(
@@ -88,6 +108,7 @@ function drawSelectionBounds(
   context: CanvasRenderingContext2D,
   bounds: Bounds,
   drawHandles: boolean,
+  drawRotationHandle: boolean,
 ) {
   const padding = 6;
 
@@ -105,29 +126,43 @@ function drawSelectionBounds(
   context.rect(left, top, width, height);
   context.stroke();
 
-  if (!drawHandles) {
-    context.restore();
-    return;
-  }
-
   context.setLineDash([]);
   context.fillStyle = "#e5e7eb";
-  const handleSize = 10;
-  const right = left + width;
-  const bottom = top + height;
 
-  const handles = [
-    { x: left, y: top },
-    { x: right, y: top },
-    { x: left, y: bottom },
-    { x: right, y: bottom },
-  ];
+  if (drawRotationHandle) {
+    const handleSize = 10;
+    const centerX = left + width / 2;
+    const rotateHandleY = top - 24;
 
-  for (const handle of handles) {
     context.beginPath();
-    context.rect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+    context.moveTo(centerX, top);
+    context.lineTo(centerX, rotateHandleY);
+    context.stroke();
+
+    context.beginPath();
+    context.arc(centerX, rotateHandleY, handleSize / 1.5, 0, Math.PI * 2);
     context.fill();
     context.stroke();
+  }
+
+  if (drawHandles) {
+    const handleSize = 10;
+    const right = left + width;
+    const bottom = top + height;
+
+    const handles = [
+      { x: left, y: top },
+      { x: right, y: top },
+      { x: left, y: bottom },
+      { x: right, y: bottom },
+    ];
+
+    for (const handle of handles) {
+      context.beginPath();
+      context.rect(handle.x - handleSize / 2, handle.y - handleSize / 2, handleSize, handleSize);
+      context.fill();
+      context.stroke();
+    }
   }
 
   context.restore();
@@ -144,35 +179,53 @@ export function drawSelection(
   }
 
   if (selections.length === 1) {
-    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!, elements), selections[0]!.kind !== "group");
+    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!, elements), selections[0]!.kind !== "group", true);
     return;
   }
 
   for (const item of selections) {
-    drawSelectionBounds(context, getSelectionBounds(context, item, elements), false);
+    drawSelectionBounds(context, getSelectionBounds(context, item, elements), false, false);
   }
-  drawSelectionBounds(context, getCombinedSelectionBounds(context, selections, elements), false);
+  drawSelectionBounds(context, getCombinedSelectionBounds(context, selections, elements), false, true);
 }
 
 export function findResizeHandleAtPoint(
   context: CanvasRenderingContext2D,
   point: Point,
-  selection: Selection,
+  selection: SelectionSet,
   elements: WhiteboardElement[] = [],
 ): ResizeHandle | null {
-  if (selection.kind === "group") return null;
-  const bounds = getSelectionBounds(context, selection, elements);
   const padding = 6;
   const handleHitSize = 16;
-  const left = bounds.left - padding;
+  
+  const combinedBounds = getCombinedSelectionBounds(context, selection, elements);
+  const top = combinedBounds.top - padding;
+  const left = combinedBounds.left - padding;
+  const width = combinedBounds.right - combinedBounds.left + padding * 2;
+  const centerX = left + width / 2;
+  const rotateHandleY = top - 24;
+  
+  if (
+    point.x >= centerX - handleHitSize &&
+    point.x <= centerX + handleHitSize &&
+    point.y >= rotateHandleY - handleHitSize &&
+    point.y <= rotateHandleY + handleHitSize
+  ) {
+    return "rotate";
+  }
+
+  if (selection.length !== 1 || selection[0]!.kind === "group") return null;
+
+  const bounds = getSelectionBounds(context, selection[0]!, elements);
   const right = bounds.right + padding;
-  const top = bounds.top - padding;
   const bottom = bounds.bottom + padding;
+  const singleTop = bounds.top - padding;
+  const singleLeft = bounds.left - padding;
 
   const handles: { type: ResizeHandle; x: number; y: number }[] = [
-    { type: "top-left", x: left, y: top },
-    { type: "top-right", x: right, y: top },
-    { type: "bottom-left", x: left, y: bottom },
+    { type: "top-left", x: singleLeft, y: singleTop },
+    { type: "top-right", x: right, y: singleTop },
+    { type: "bottom-left", x: singleLeft, y: bottom },
     { type: "bottom-right", x: right, y: bottom },
   ];
 

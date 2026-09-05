@@ -11,6 +11,8 @@ import type {
 } from "@/types/canvas";
 import { distanceBetweenPoints, distanceToSegment } from "./geometry";
 import { getSelectionBounds } from "./selection";
+import { rotatePoint } from "./geometry";
+import { getElementCenter } from "@/editor/rotation";
 
 export const ERASER_TOLERANCE = 8;
 
@@ -56,15 +58,20 @@ export function isPointOnElement(
   point: Point,
   element: WhiteboardElement,
 ) {
+  let hitPoint = point;
+  if (element.rotation) {
+    hitPoint = rotatePoint(point, getElementCenter(element), -element.rotation);
+  }
+
   switch (element.type) {
     case "rectangle":
-      return isPointNearRectangle(point, element);
+      return isPointNearRectangle(hitPoint, element);
     case "circle":
-      return isPointNearEllipse(point, element);
+      return isPointNearEllipse(hitPoint, element);
     case "arrow":
-      return isPointNearArrow(point, element);
+      return isPointNearArrow(hitPoint, element);
     case "text":
-      return isPointInTextBounds(context, point, element);
+      return isPointInTextBounds(context, hitPoint, element);
   }
 }
 

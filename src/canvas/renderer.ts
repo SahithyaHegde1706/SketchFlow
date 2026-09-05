@@ -105,14 +105,31 @@ export function drawRectangle(
   context: CanvasRenderingContext2D,
   rectangle: RectangleElement,
 ) {
+  context.save();
+  if (rectangle.rotation) {
+    const cx = rectangle.x + rectangle.width / 2;
+    const cy = rectangle.y + rectangle.height / 2;
+    context.translate(cx, cy);
+    context.rotate(rectangle.rotation);
+    context.translate(-cx, -cy);
+  }
   context.strokeStyle = rectangle.strokeColor;
   context.lineWidth = rectangle.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
   context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+  context.restore();
 }
 
 export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElement) {
+  context.save();
+  if (circle.rotation) {
+    const cx = circle.x + circle.width / 2;
+    const cy = circle.y + circle.height / 2;
+    context.translate(cx, cy);
+    context.rotate(circle.rotation);
+    context.translate(-cx, -cy);
+  }
   context.strokeStyle = circle.strokeColor;
   context.lineWidth = circle.strokeWidth;
   context.lineCap = "round";
@@ -128,9 +145,18 @@ export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElem
     Math.PI * 2,
   );
   context.stroke();
+  context.restore();
 }
 
 export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement) {
+  context.save();
+  if (arrow.rotation) {
+    const cx = (arrow.startX + arrow.endX) / 2;
+    const cy = (arrow.startY + arrow.endY) / 2;
+    context.translate(cx, cy);
+    context.rotate(arrow.rotation);
+    context.translate(-cx, -cy);
+  }
   const angle = Math.atan2(arrow.endY - arrow.startY, arrow.endX - arrow.startX);
   const arrowheadLength = 12;
   const arrowheadAngle = Math.PI / 7;
@@ -152,11 +178,21 @@ export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement
     arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
   );
   context.stroke();
+  context.restore();
 }
 
 export function drawText(context: CanvasRenderingContext2D, text: TextElement) {
+  context.save();
+  if (text.rotation) {
+    const cx = text.x; // approx
+    const cy = text.y - text.fontSize / 2;
+    context.translate(cx, cy);
+    context.rotate(text.rotation);
+    context.translate(-cx, -cy);
+  }
   context.fillStyle = text.strokeColor;
   context.font = `${text.fontSize}px Arial, sans-serif`;
   context.textBaseline = "alphabetic";
   context.fillText(text.text, text.x, text.y);
+  context.restore();
 }

@@ -73,3 +73,16 @@ export function zoomViewport(
     scale: newScale,
   };
 }
+
+export function rotatePoint(point: Point, center: Point, angle: number): Point {
+  if (!angle) return point;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const deltaX = point.x - center.x;
+  const deltaY = point.y - center.y;
+
+  return {
+    x: center.x + deltaX * cos - deltaY * sin,
+    y: center.y + deltaX * sin + deltaY * cos,
+  };
+}

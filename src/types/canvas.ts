@@ -14,6 +14,7 @@ export type RectangleElement = {
   height: number;
   strokeColor: string;
   strokeWidth: number;
+  rotation?: number;
 };
 
 export type CircleElement = {
@@ -25,6 +26,7 @@ export type CircleElement = {
   height: number;
   strokeColor: string;
   strokeWidth: number;
+  rotation?: number;
 };
 
 export type ArrowElement = {
@@ -36,6 +38,7 @@ export type ArrowElement = {
   endY: number;
   strokeColor: string;
   strokeWidth: number;
+  rotation?: number;
 };
 
 export type TextElement = {
@@ -46,6 +49,7 @@ export type TextElement = {
   text: string;
   fontSize: number;
   strokeColor: string;
+  rotation?: number;
 };
 
 export type WhiteboardElement =
@@ -86,7 +90,7 @@ export type CreationRecord =
   | { kind: "stroke"; value: FreehandStroke }
   | { kind: "element"; value: WhiteboardElement };
 
-export type ResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export type ResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "rotate";
 
 export type DragState = {
   selection: Selection;
@@ -122,4 +126,14 @@ export type PanState = {
   pointerStartY: number;
   originOffsetX: number;
   originOffsetY: number;
+};
+
+export type RotationState = {
+  selections: Selection[];
+  originals: (FreehandStroke | WhiteboardElement | Group)[];
+  originalElements: WhiteboardElement[];
+  centerX: number;
+  centerY: number;
+  initialPointerAngle: number;
+  moved: boolean;
 };

@@ -12,6 +12,7 @@ import type {
   PanState,
   Point,
   RectangleElement,
+  RotationState,
   Group,
   ResizeHandle,
   Selection,
@@ -24,13 +25,14 @@ import type {
 } from "@/types/canvas";
 import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
-import { findResizeHandleAtPoint } from "@/canvas/selection";
+import { findResizeHandleAtPoint, getCombinedSelectionBounds } from "@/canvas/selection";
 import { screenToLogical, zoomViewport } from "@/canvas/geometry";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
 import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
 import { moveSelection } from "@/editor/movement";
 import { resizeSelection } from "@/editor/resizing";
+import { applyRotation } from "@/editor/rotation";
 import { applyLayerOperation, getLayerAvailability } from "@/editor/layering";
 import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 import { ZoomControls } from "@/components/ZoomControls";
@@ -79,6 +81,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const selectionRef = useRef<SelectionSet>([]);
   const dragRef = useRef<DragState | null>(null);
   const multiDragRef = useRef<MultiDragState | null>(null);
+  const rotationRef = useRef<RotationState | null>(null);
   const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0, scale: 1 });
   const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
@@ -508,11 +511,29 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         : null;
 
       let clickedHandle: ResizeHandle | null = null;
-      if (currentSelection.length === 1 && context) {
-        clickedHandle = findResizeHandleAtPoint(context, point, currentSelection[0]!);
+      if (currentSelection.length > 0 && context) {
+        clickedHandle = findResizeHandleAtPoint(context, point, currentSelection, elementsRef.current);
       }
 
-      if (clickedHandle && currentSelection.length === 1) {
+      if (clickedHandle === "rotate" && currentSelection.length > 0) {
+        // Find selection bounds center to use as the orbit center
+        const bounds = getCombinedSelectionBounds(context!, currentSelection, elementsRef.current);
+        const centerX = (bounds.left + bounds.right) / 2;
+        const centerY = (bounds.top + bounds.bottom) / 2;
+        
+        const flatSelections = flattenSelection(currentSelection);
+        rotationRef.current = {
+          selections: flatSelections,
+          originals: flatSelections.map(selection => cloneSelectionValue(selection)),
+          originalElements: elementsRef.current.map(e => ({ ...e })),
+          centerX,
+          centerY,
+          initialPointerAngle: Math.atan2(point.y - centerY, point.x - centerX),
+          moved: false,
+        };
+        activePointerIdRef.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } else if (clickedHandle && currentSelection.length === 1) {
         const selection = currentSelection[0]!;
         dragRef.current = {
           selection,
@@ -725,6 +746,20 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         }
       });
       multiDragRef.current = null;
+    }
+
+    if (rotationRef.current) {
+      const rotation = rotationRef.current;
+      // Revert rotation if cancelled
+      applyRotation(
+        rotation.selections,
+        rotation.originals,
+        rotation.originalElements,
+        0,
+        { x: rotation.centerX, y: rotation.centerY },
+        elementsRef.current
+      );
+      rotationRef.current = null;
     }
 
     if (dragRef.current) {
@@ -1045,9 +1080,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       if (activeTool === "select") {
         const currentSelection = selectionRef.current;
         const context = canvasRef.current?.getContext("2d");
-        if (currentSelection.length === 1 && context) {
-          const hoveredHandle = findResizeHandleAtPoint(context, point, currentSelection[0]!);
-          if (hoveredHandle === "top-left" || hoveredHandle === "bottom-right") {
+        if (currentSelection.length > 0 && context) {
+          const hoveredHandle = findResizeHandleAtPoint(context, point, currentSelection, elementsRef.current);
+          if (hoveredHandle === "rotate") {
+            event.currentTarget.style.cursor = "grab";
+          } else if (hoveredHandle === "top-left" || hoveredHandle === "bottom-right") {
             event.currentTarget.style.cursor = "nwse-resize";
           } else if (hoveredHandle === "top-right" || hoveredHandle === "bottom-left") {
             event.currentTarget.style.cursor = "nesw-resize";
@@ -1206,6 +1243,29 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "select") {
+      const rotation = rotationRef.current;
+      if (rotation) {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        rotationRef.current = null;
+        activePointerIdRef.current = null;
+        renderCanvas(
+          canvasRef.current,
+          strokesRef.current,
+          elementsRef.current,
+          null,
+          null,
+          null,
+          selectionRef.current,
+          viewportRef.current,
+        );
+        if (rotation.moved) {
+          addHistory();
+        }
+        return;
+      }
+
       const multiDrag = multiDragRef.current;
       if (multiDrag) {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
