@@ -46,14 +46,30 @@ export function getStrokeBounds(stroke: FreehandStroke): Bounds {
 
 export function screenToLogical(point: Point, viewport: Viewport): Point {
   return {
-    x: point.x - viewport.offsetX,
-    y: point.y - viewport.offsetY,
+    x: (point.x - viewport.offsetX) / viewport.scale,
+    y: (point.y - viewport.offsetY) / viewport.scale,
   };
 }
 
 export function logicalToScreen(point: Point, viewport: Viewport): Point {
   return {
-    x: point.x + viewport.offsetX,
-    y: point.y + viewport.offsetY,
+    x: point.x * viewport.scale + viewport.offsetX,
+    y: point.y * viewport.scale + viewport.offsetY,
+  };
+}
+
+export function zoomViewport(
+  viewport: Viewport,
+  newScale: number,
+  zoomCenterX: number,
+  zoomCenterY: number,
+): Viewport {
+  const logicalX = (zoomCenterX - viewport.offsetX) / viewport.scale;
+  const logicalY = (zoomCenterY - viewport.offsetY) / viewport.scale;
+
+  return {
+    offsetX: zoomCenterX - logicalX * newScale,
+    offsetY: zoomCenterY - logicalY * newScale,
+    scale: newScale,
   };
 }

@@ -98,6 +98,7 @@ export type Bounds = {
 export type Viewport = {
   offsetX: number;
   offsetY: number;
+  scale: number;
 };
 
 export type PanState = {

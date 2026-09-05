@@ -22,11 +22,12 @@ import type {
 import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
 import { findResizeHandleAtPoint } from "@/canvas/selection";
-import { screenToLogical } from "@/canvas/geometry";
+import { screenToLogical, zoomViewport } from "@/canvas/geometry";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
 import { moveSelection } from "@/editor/movement";
 import { resizeSelection } from "@/editor/resizing";
+import { ZoomControls } from "@/components/ZoomControls";
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -39,7 +40,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const creationOrderRef = useRef<CreationRecord[]>([]);
   const selectionRef = useRef<Selection | null>(null);
   const dragRef = useRef<DragState | null>(null);
-  const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0 });
+  const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0, scale: 1 });
   const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const activeRectangleRef = useRef<RectangleElement | null>(null);
@@ -51,6 +52,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const textInputRef = useRef<HTMLInputElement>(null);
   const textEditorRef = useRef<TextEditorState | null>(null);
   const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
+  const [zoom, setZoom] = useState(1);
   const activePointerIdRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -161,6 +163,51 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       textInputRef.current?.focus();
     }
   }, [textEditor]);
+
+  const applyZoom = (newScale: number, centerX: number, centerY: number) => {
+    newScale = Math.min(Math.max(newScale, 0.25), 4);
+    if (newScale === viewportRef.current.scale) return;
+
+    viewportRef.current = zoomViewport(viewportRef.current, newScale, centerX, centerY);
+    setZoom(newScale);
+
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      activeRectangleRef.current,
+      activeCircleRef.current,
+      activeArrowRef.current,
+      selectionRef.current,
+      viewportRef.current,
+    );
+  };
+
+  const zoomFromCenter = (newScale: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    applyZoom(newScale, rect.width / 2, rect.height / 2);
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const onNativeWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) {
+        event.preventDefault();
+        const delta = event.deltaY > 0 ? -0.1 : 0.1;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        applyZoom(viewportRef.current.scale + delta, x, y);
+      }
+    };
+
+    canvas.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onNativeWheel);
+  }, []);
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
@@ -361,6 +408,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       viewportRef.current = {
         offsetX: pan.originOffsetX + (screenPoint.x - pan.pointerStartX),
         offsetY: pan.originOffsetY + (screenPoint.y - pan.pointerStartY),
+        scale: viewportRef.current.scale,
       };
       renderCanvas(
         canvasRef.current,
@@ -624,6 +672,12 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         onPointerCancel={stopDrawing}
         onPointerLeave={handlePointerLeave}
       />
+      <ZoomControls
+        zoom={zoom}
+        onZoomIn={() => zoomFromCenter(viewportRef.current.scale + 0.1)}
+        onZoomOut={() => zoomFromCenter(viewportRef.current.scale - 0.1)}
+        onReset={() => zoomFromCenter(1)}
+      />
       {textEditor && (
         <input
           ref={textInputRef}
@@ -638,8 +692,9 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
           placeholder="Type here"
           style={{
             left: textEditor.x,
-            top: Math.max(4, textEditor.y - TEXT_FONT_SIZE),
-            width: 200,
+            top: Math.max(4, textEditor.y - TEXT_FONT_SIZE * zoom),
+            width: 200 * zoom,
+            fontSize: TEXT_FONT_SIZE * zoom,
           }}
         />
       )}

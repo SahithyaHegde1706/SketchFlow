@@ -43,6 +43,7 @@ export function renderCanvas(
 
   context.save();
   context.translate(viewport.offsetX, viewport.offsetY);
+  context.scale(viewport.scale, viewport.scale);
 
   for (const stroke of strokes) {
     drawStroke(context, stroke);
