@@ -1,6 +1,18 @@
+type BoardHeaderProps = {
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+};
+
 const MoreIcon = () => <span aria-hidden="true">...</span>;
 
-export function BoardHeader() {
+export function BoardHeader({
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
+}: BoardHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7">
       <div className="flex min-w-0 items-center gap-4">
@@ -20,6 +32,33 @@ export function BoardHeader() {
         <span className="mr-1 hidden text-xs text-slate-400 lg:block">
           Draw. Think. Collaborate.
         </span>
+
+        <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block" />
+
+        <button
+          type="button"
+          onClick={onUndo}
+          disabled={!canUndo}
+          aria-label="Undo"
+          title="Undo (Ctrl+Z)"
+          className="inline-flex size-9 items-center justify-center rounded-lg text-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+        >
+          <span aria-hidden="true">↶</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onRedo}
+          disabled={!canRedo}
+          aria-label="Redo"
+          title="Redo (Ctrl+Shift+Z)"
+          className="inline-flex size-9 items-center justify-center rounded-lg text-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+        >
+          <span aria-hidden="true">↷</span>
+        </button>
+
+        <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block" />
+
         <button
           type="button"
           aria-label="Share board"

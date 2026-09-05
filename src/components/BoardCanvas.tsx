@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChangeEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type {
   ArrowElement,
   CircleElement,
@@ -28,13 +28,30 @@ import { cloneSelectionValue, createArrow, createCircle, createRectangle } from 
 import { moveSelection } from "@/editor/movement";
 import { resizeSelection } from "@/editor/resizing";
 import { ZoomControls } from "@/components/ZoomControls";
+import {
+  canRedo,
+  canUndo,
+  createHistory,
+  createSnapshot,
+  record,
+  redo,
+  undo,
+} from "@/history/history";
+import type { HistoryState, CanvasSnapshot } from "@/history/types";
 
 type BoardCanvasProps = {
   activeTool: Tool;
+  onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
 };
 
-export function BoardCanvas({ activeTool }: BoardCanvasProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export type BoardCanvasHandle = {
+  undo: () => void;
+  redo: () => void;
+};
+
+export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
+  ({ activeTool, onHistoryChange }, ref) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
   const creationOrderRef = useRef<CreationRecord[]>([]);
@@ -54,6 +71,82 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
   const [zoom, setZoom] = useState(1);
   const activePointerIdRef = useRef<number | null>(null);
+  const historyRef = useRef<HistoryState | null>(null);
+
+  const addHistory = () => {
+    if (!historyRef.current) return;
+    historyRef.current = record(
+      historyRef.current,
+      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current)
+    );
+    onHistoryChange?.(canUndo(historyRef.current), canRedo(historyRef.current));
+  };
+
+  useEffect(() => {
+    historyRef.current = createHistory(
+      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current)
+    );
+  }, []);
+
+  const applySnapshot = (snapshot: CanvasSnapshot) => {
+    strokesRef.current = JSON.parse(JSON.stringify(snapshot.strokes));
+    elementsRef.current = JSON.parse(JSON.stringify(snapshot.elements));
+    creationOrderRef.current = JSON.parse(JSON.stringify(snapshot.creationOrder));
+
+    if (selectionRef.current) {
+      let stillExists = false;
+      const targetValue = selectionRef.current.value;
+      if (selectionRef.current.kind === "stroke") {
+        stillExists = strokesRef.current.some(s => JSON.stringify(s) === JSON.stringify(targetValue));
+      } else {
+        const element = targetValue as WhiteboardElement;
+        stillExists = elementsRef.current.some(e => e.id === element.id);
+      }
+      if (!stillExists) {
+        selectionRef.current = null;
+      } else if (selectionRef.current.kind !== "stroke") {
+        const element = targetValue as WhiteboardElement;
+        const newRef = elementsRef.current.find(e => e.id === element.id);
+        if (newRef) selectionRef.current = { kind: "element", value: newRef };
+      }
+    }
+
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      activeRectangleRef.current,
+      activeCircleRef.current,
+      activeArrowRef.current,
+      selectionRef.current,
+      viewportRef.current,
+    );
+  };
+
+  const handleUndo = () => {
+    if (!historyRef.current) return;
+    const { newHistory, snapshot } = undo(historyRef.current);
+    if (snapshot) {
+      historyRef.current = newHistory;
+      applySnapshot(snapshot);
+      onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
+    }
+  };
+
+  const handleRedo = () => {
+    if (!historyRef.current) return;
+    const { newHistory, snapshot } = redo(historyRef.current);
+    if (snapshot) {
+      historyRef.current = newHistory;
+      applySnapshot(snapshot);
+      onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
+    }
+  };
+
+  useImperativeHandle(ref, () => ({
+    undo: handleUndo,
+    redo: handleRedo,
+  }));
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -388,6 +481,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       selectionRef.current,
       viewportRef.current,
     );
+    addHistory();
   };
 
   const handleTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -586,6 +680,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         selectionRef.current,
         viewportRef.current,
       );
+      addHistory();
       return;
     }
 
@@ -604,6 +699,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       selectionRef.current,
       viewportRef.current,
     );
+    addHistory();
   };
 
   const handlePointerLeave = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -652,6 +748,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         selectionRef.current,
         viewportRef.current,
       );
+      addHistory();
       return;
     }
   };
@@ -700,5 +797,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       )}
     </section>
   );
-}
+});
+
+BoardCanvas.displayName = "BoardCanvas";
 
