@@ -58,6 +58,8 @@ export type Selection =
   | { kind: "stroke"; value: FreehandStroke }
   | { kind: "element"; value: WhiteboardElement };
 
+export type SelectionSet = Selection[];
+
 export type Tool =
   | "select"
   | "hand"
@@ -86,6 +88,14 @@ export type DragState = {
   original: FreehandStroke | WhiteboardElement;
   type: "move" | "resize";
   handle?: ResizeHandle;
+};
+
+export type MultiDragState = {
+  selections: Selection[];
+  originals: (FreehandStroke | WhiteboardElement)[];
+  pointerStart: Point;
+  clicked: Selection;
+  moved: boolean;
 };
 
 export type Bounds = {

@@ -3,7 +3,7 @@ import type {
   CircleElement,
   FreehandStroke,
   RectangleElement,
-  Selection,
+  SelectionSet,
   TextElement,
   Viewport,
   WhiteboardElement,
@@ -21,7 +21,7 @@ export function renderCanvas(
   rectanglePreview: RectangleElement | null,
   circlePreview: CircleElement | null,
   arrowPreview: ArrowElement | null,
-  selection: Selection | null,
+  selection: SelectionSet | null,
   viewport: Viewport,
 ) {
   if (!canvas) {

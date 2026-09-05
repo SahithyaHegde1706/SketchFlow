@@ -1,4 +1,4 @@
-import type { CreationRecord, Selection } from "@/types/canvas";
+import type { CreationRecord, SelectionSet } from "@/types/canvas";
 
 export type LayerOperation =
   | "bring-forward"
@@ -13,12 +13,13 @@ export type LayerAvailability = {
   canSendToBack: boolean;
 };
 
-function selectedIndex(records: CreationRecord[], selection: Selection | null) {
-  if (!selection) {
-    return -1;
-  }
-
-  return records.findIndex(record => record.kind === selection.kind && record.value === selection.value);
+function isSelected(records: CreationRecord, selections: SelectionSet) {
+  return selections.some(selection =>
+    records.kind === selection.kind && (
+      records.value === selection.value ||
+      (records.kind === "element" && selection.kind === "element" && records.value.id === selection.value.id)
+    )
+  );
 }
 
 function moveRecord(records: CreationRecord[], from: number, to: number) {
@@ -31,54 +32,83 @@ function moveRecord(records: CreationRecord[], from: number, to: number) {
   return true;
 }
 
-export function bringForward(records: CreationRecord[], selection: Selection | null) {
-  const index = selectedIndex(records, selection);
-  return index >= 0 && index < records.length - 1 ? moveRecord(records, index, index + 1) : false;
+export function bringForward(records: CreationRecord[], selections: SelectionSet) {
+  let changed = false;
+  for (let index = records.length - 2; index >= 0; index -= 1) {
+    if (isSelected(records[index]!, selections) && !isSelected(records[index + 1]!, selections)) {
+      moveRecord(records, index, index + 1);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
-export function sendBackward(records: CreationRecord[], selection: Selection | null) {
-  const index = selectedIndex(records, selection);
-  return index > 0 ? moveRecord(records, index, index - 1) : false;
+export function sendBackward(records: CreationRecord[], selections: SelectionSet) {
+  let changed = false;
+  for (let index = 1; index < records.length; index += 1) {
+    if (isSelected(records[index]!, selections) && !isSelected(records[index - 1]!, selections)) {
+      moveRecord(records, index, index - 1);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
-export function bringToFront(records: CreationRecord[], selection: Selection | null) {
-  const index = selectedIndex(records, selection);
-  return index >= 0 && index < records.length - 1 ? moveRecord(records, index, records.length - 1) : false;
+export function bringToFront(records: CreationRecord[], selections: SelectionSet) {
+  const selected = records.filter(record => isSelected(record, selections));
+  if (selected.length === 0 || selected.length === records.length) {
+    return false;
+  }
+
+  const remaining = records.filter(record => !isSelected(record, selections));
+  records.splice(0, records.length, ...remaining, ...selected);
+  return true;
 }
 
-export function sendToBack(records: CreationRecord[], selection: Selection | null) {
-  const index = selectedIndex(records, selection);
-  return index > 0 ? moveRecord(records, index, 0) : false;
+export function sendToBack(records: CreationRecord[], selections: SelectionSet) {
+  const selected = records.filter(record => isSelected(record, selections));
+  if (selected.length === 0 || selected.length === records.length) {
+    return false;
+  }
+
+  const remaining = records.filter(record => !isSelected(record, selections));
+  records.splice(0, records.length, ...selected, ...remaining);
+  return true;
 }
 
 export function getLayerAvailability(
   records: CreationRecord[],
-  selection: Selection | null,
+  selections: SelectionSet,
 ): LayerAvailability {
-  const index = selectedIndex(records, selection);
-  const hasSelection = index >= 0;
+  const hasSelection = selections.length > 0 && records.some(record => isSelected(record, selections));
+  const canMoveForward = hasSelection && records.some((record, index) =>
+    isSelected(record, selections) && records.slice(index + 1).some(candidate => !isSelected(candidate, selections))
+  );
+  const canMoveBackward = hasSelection && records.some((record, index) =>
+    isSelected(record, selections) && records.slice(0, index).some(candidate => !isSelected(candidate, selections))
+  );
 
   return {
-    canBringForward: hasSelection && index < records.length - 1,
-    canSendBackward: hasSelection && index > 0,
-    canBringToFront: hasSelection && index < records.length - 1,
-    canSendToBack: hasSelection && index > 0,
+    canBringForward: canMoveForward,
+    canSendBackward: canMoveBackward,
+    canBringToFront: canMoveForward,
+    canSendToBack: canMoveBackward,
   };
 }
 
 export function applyLayerOperation(
   records: CreationRecord[],
-  selection: Selection | null,
+  selections: SelectionSet,
   operation: LayerOperation,
 ) {
   switch (operation) {
     case "bring-forward":
-      return bringForward(records, selection);
+      return bringForward(records, selections);
     case "send-backward":
-      return sendBackward(records, selection);
+      return sendBackward(records, selections);
     case "bring-to-front":
-      return bringToFront(records, selection);
+      return bringToFront(records, selections);
     case "send-to-back":
-      return sendToBack(records, selection);
+      return sendToBack(records, selections);
   }
 }

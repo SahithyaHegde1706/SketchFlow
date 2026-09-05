@@ -1,17 +1,31 @@
-import type { CreationRecord, FreehandStroke, WhiteboardElement } from "@/types/canvas";
-import type { CanvasSnapshot, HistoryState } from "./types";
+import type { CreationRecord, FreehandStroke, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { CanvasSnapshot, HistoryState, SelectionSnapshot } from "./types";
 
 const MAX_HISTORY = 100;
+
+export function createSelectionSnapshot(
+  strokes: FreehandStroke[],
+  selection: SelectionSet,
+): SelectionSnapshot[] {
+  return selection.map(item => {
+    if (item.kind === "stroke") {
+      return { kind: "stroke", index: strokes.indexOf(item.value) };
+    }
+    return { kind: "element", id: item.value.id };
+  });
+}
 
 export function createSnapshot(
   strokes: FreehandStroke[],
   elements: WhiteboardElement[],
   creationOrder: CreationRecord[],
+  selection: SelectionSet = [],
 ): CanvasSnapshot {
   return {
     strokes: JSON.parse(JSON.stringify(strokes)),
     elements: JSON.parse(JSON.stringify(elements)),
     creationOrder: JSON.parse(JSON.stringify(creationOrder)),
+    selection: createSelectionSnapshot(strokes, selection),
   };
 }
 

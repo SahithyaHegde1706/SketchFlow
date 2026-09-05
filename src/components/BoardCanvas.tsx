@@ -8,11 +8,13 @@ import type {
   CreationRecord,
   DragState,
   FreehandStroke,
+  MultiDragState,
   PanState,
   Point,
   RectangleElement,
   ResizeHandle,
   Selection,
+  SelectionSet,
   TextElement,
   TextEditorState,
   Tool,
@@ -35,13 +37,14 @@ import {
   canRedo,
   canUndo,
   createHistory,
+  createSelectionSnapshot,
   createSnapshot,
   record,
   redo,
   undo,
 } from "@/history/history";
 import type { HistoryState, CanvasSnapshot } from "@/history/types";
-import { copyToClipboard, offsetSelection } from "@/clipboard/clipboard";
+import { copyToClipboard, offsetSelections } from "@/clipboard/clipboard";
 import type { ClipboardState } from "@/clipboard/types";
 
 type BoardCanvasProps = {
@@ -67,8 +70,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
   const creationOrderRef = useRef<CreationRecord[]>([]);
-  const selectionRef = useRef<Selection | null>(null);
+  const selectionRef = useRef<SelectionSet>([]);
   const dragRef = useRef<DragState | null>(null);
+  const multiDragRef = useRef<MultiDragState | null>(null);
   const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0, scale: 1 });
   const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
@@ -93,10 +97,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (!historyRef.current) return;
     historyRef.current = record(
       historyRef.current,
-      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current)
+      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current)
     );
     onHistoryChange?.(canUndo(historyRef.current), canRedo(historyRef.current));
   };
+
+  const selectionIncludes = (selections: SelectionSet, candidate: Selection) =>
+    selections.some(selection => selection.kind === candidate.kind && (
+      selection.value === candidate.value ||
+      (selection.kind === "element" && candidate.kind === "element" && selection.value.id === candidate.value.id)
+    ));
 
   useEffect(() => {
     historyRef.current = createHistory(
@@ -105,9 +115,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   }, []);
 
   const applySnapshot = (snapshot: CanvasSnapshot) => {
-    const selectedStrokeIndex = selectionRef.current?.kind === "stroke"
-      ? strokesRef.current.indexOf(selectionRef.current.value)
-      : -1;
     strokesRef.current = JSON.parse(JSON.stringify(snapshot.strokes));
     elementsRef.current = JSON.parse(JSON.stringify(snapshot.elements));
     const restoredCreationOrder = JSON.parse(JSON.stringify(snapshot.creationOrder)) as CreationRecord[];
@@ -125,27 +132,18 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       })
       .filter((record): record is CreationRecord => record !== null);
 
-    if (selectionRef.current) {
-      let stillExists = false;
-      const targetValue = selectionRef.current.value;
-      if (selectionRef.current.kind === "stroke") {
-        const restoredStroke = selectedStrokeIndex >= 0 ? strokesRef.current[selectedStrokeIndex] : undefined;
-        stillExists = restoredStroke !== undefined;
-        if (restoredStroke) {
-          selectionRef.current = { kind: "stroke", value: restoredStroke };
-        }
-      } else {
-        const element = targetValue as WhiteboardElement;
-        stillExists = elementsRef.current.some(e => e.id === element.id);
+    const restoredSelection: SelectionSet = [];
+    for (const selection of snapshot.selection ?? []) {
+      if (selection.kind === "stroke") {
+        const stroke = strokesRef.current[selection.index];
+        if (stroke) restoredSelection.push({ kind: "stroke", value: stroke });
+        continue;
       }
-      if (!stillExists) {
-        selectionRef.current = null;
-      } else if (selectionRef.current.kind !== "stroke") {
-        const element = targetValue as WhiteboardElement;
-        const newRef = elementsRef.current.find(e => e.id === element.id);
-        if (newRef) selectionRef.current = { kind: "element", value: newRef };
-      }
+
+      const element = elementsRef.current.find(item => item.id === selection.id);
+      if (element) restoredSelection.push({ kind: "element", value: element });
     }
+    selectionRef.current = restoredSelection;
 
     renderCanvas(
       canvasRef.current,
@@ -182,13 +180,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const notifyClipboardChange = () => {
     onClipboardChange?.(
-      !!selectionRef.current, // canCopy
+      selectionRef.current.length > 0, // canCopy
       !!clipboardRef.current.item, // canPaste
-      !!selectionRef.current, // canDuplicate
+      selectionRef.current.length > 0, // canDuplicate
     );
   };
 
   const notifyLayerChange = () => {
+    if (historyRef.current) {
+      const lastSnapshot = historyRef.current.undoStack[historyRef.current.undoStack.length - 1];
+      if (lastSnapshot) {
+        historyRef.current = {
+          ...historyRef.current,
+          undoStack: [
+            ...historyRef.current.undoStack.slice(0, -1),
+            { ...lastSnapshot, selection: createSelectionSnapshot(strokesRef.current, selectionRef.current) },
+          ],
+        };
+      }
+    }
     onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
   };
 
@@ -218,14 +228,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const handlePaste = () => {
     if (!clipboardRef.current.item) return;
-    const newSelection = offsetSelection(clipboardRef.current.item, 20);
-    
-    if (newSelection.kind === "stroke") {
-      strokesRef.current.push(newSelection.value);
-    } else {
-      elementsRef.current.push(newSelection.value);
+    const newSelection = offsetSelections(clipboardRef.current.item, 20);
+
+    for (const item of newSelection) {
+      if (item.kind === "stroke") strokesRef.current.push(item.value);
+      else elementsRef.current.push(item.value);
+      creationOrderRef.current.push(item);
     }
-    creationOrderRef.current.push(newSelection);
     selectionRef.current = newSelection;
     
     renderCanvas(
@@ -239,15 +248,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   };
 
   const handleDuplicate = () => {
-    if (!selectionRef.current) return;
-    const newSelection = offsetSelection(selectionRef.current, 20);
-    
-    if (newSelection.kind === "stroke") {
-      strokesRef.current.push(newSelection.value);
-    } else {
-      elementsRef.current.push(newSelection.value);
+    if (selectionRef.current.length === 0) return;
+    const newSelection = offsetSelections(selectionRef.current, 20);
+
+    for (const item of newSelection) {
+      if (item.kind === "stroke") strokesRef.current.push(item.value);
+      else elementsRef.current.push(item.value);
+      creationOrderRef.current.push(item);
     }
-    creationOrderRef.current.push(newSelection);
     selectionRef.current = newSelection;
     
     renderCanvas(
@@ -401,38 +409,67 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (activeTool === "select") {
       const currentSelection = selectionRef.current;
       const context = canvasRef.current?.getContext("2d");
+      const clickedSelection = context
+        ? findSelectionAtPoint(context, point, creationOrderRef.current, true)
+        : null;
 
       let clickedHandle: ResizeHandle | null = null;
-      if (currentSelection && context) {
-        clickedHandle = findResizeHandleAtPoint(context, point, currentSelection);
+      if (currentSelection.length === 1 && context) {
+        clickedHandle = findResizeHandleAtPoint(context, point, currentSelection[0]!);
       }
 
-      if (clickedHandle && currentSelection) {
+      if (clickedHandle && currentSelection.length === 1) {
+        const selection = currentSelection[0]!;
         dragRef.current = {
-          selection: currentSelection,
+          selection,
           pointerStart: point,
-          original: cloneSelectionValue(currentSelection),
+          original: cloneSelectionValue(selection),
           type: "resize",
           handle: clickedHandle,
         };
         activePointerIdRef.current = event.pointerId;
         event.currentTarget.setPointerCapture(event.pointerId);
-      } else {
-        const nextSelection = context ? findSelectionAtPoint(context, point, creationOrderRef.current, true) : null;
-        selectionRef.current = nextSelection;
+      } else if (event.shiftKey) {
+        if (clickedSelection) {
+          selectionRef.current = selectionIncludes(currentSelection, clickedSelection)
+            ? currentSelection.filter(selection => !selectionIncludes([selection], clickedSelection))
+            : [...currentSelection, clickedSelection];
+          notifyLayerChange();
+        }
+        dragRef.current = null;
+        multiDragRef.current = null;
+      } else if (!clickedSelection) {
+        selectionRef.current = [];
+        dragRef.current = null;
+        multiDragRef.current = null;
         notifyLayerChange();
-
-        if (nextSelection) {
-          dragRef.current = {
-            selection: nextSelection,
+      } else {
+        const wasSelected = selectionIncludes(currentSelection, clickedSelection);
+        if (wasSelected && currentSelection.length > 1) {
+          multiDragRef.current = {
+            selections: [...currentSelection],
+            originals: currentSelection.map(selection => cloneSelectionValue(selection)),
             pointerStart: point,
-            original: cloneSelectionValue(nextSelection),
-            type: "move",
+            clicked: clickedSelection,
+            moved: false,
           };
           activePointerIdRef.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
         } else {
+          selectionRef.current = [clickedSelection];
+          notifyLayerChange();
           dragRef.current = null;
+          multiDragRef.current = null;
+          if (wasSelected || currentSelection.length === 0) {
+            dragRef.current = {
+              selection: clickedSelection,
+              pointerStart: point,
+              original: cloneSelectionValue(clickedSelection),
+              type: "move",
+            };
+            activePointerIdRef.current = event.pointerId;
+            event.currentTarget.setPointerCapture(event.pointerId);
+          }
         }
       }
 
@@ -449,13 +486,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       return;
     }
 
-    selectionRef.current = null;
-    notifyLayerChange();
-
     if (activeTool === "eraser") {
       eraseAtPoint(point);
       return;
     }
+
+    selectionRef.current = [];
+    notifyLayerChange();
 
     activePointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -582,6 +619,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       activeStrokeRef.current = null;
     }
 
+    if (multiDragRef.current) {
+      multiDragRef.current.selections.forEach((selection, index) => {
+        const original = multiDragRef.current?.originals[index];
+        if (original) {
+          moveSelection(selection, original, 0, 0);
+        }
+      });
+      multiDragRef.current = null;
+    }
+
     if (dragRef.current) {
       const { selection, original } = dragRef.current;
       if (selection.kind === "stroke" && Array.isArray(original)) {
@@ -628,11 +675,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const moveSelectedByKeyboard = (deltaX: number, deltaY: number) => {
     const selection = selectionRef.current;
-    if (!selection) {
+    if (selection.length === 0) {
       return false;
     }
 
-    moveSelection(selection, cloneSelectionValue(selection), deltaX, deltaY);
+    selection.forEach(item => {
+      moveSelection(item, cloneSelectionValue(item), deltaX, deltaY);
+    });
     keyboardMovementPendingRef.current = true;
     renderCanvas(
       canvasRef.current,
@@ -702,7 +751,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         } else if (activePointerIdRef.current !== null || dragRef.current || activeStrokeRef.current) {
           actions.cancelInteraction();
         } else {
-          selectionRef.current = null;
+          selectionRef.current = [];
           renderCanvas(
             canvasRef.current,
             strokesRef.current,
@@ -721,15 +770,22 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
       if (event.key === "Delete" || event.key === "Backspace") {
         actions.finishKeyboardMovement();
-        if (selectionRef.current) {
+        if (selectionRef.current.length > 0) {
           event.preventDefault();
-          if (selectionRef.current.kind === "stroke") {
-            removeByReference(strokesRef.current, selectionRef.current.value);
-          } else {
-            removeByReference(elementsRef.current, selectionRef.current.value);
+          for (const selection of selectionRef.current) {
+            if (selection.kind === "stroke") {
+              removeByReference(strokesRef.current, selection.value);
+            } else {
+              removeByReference(elementsRef.current, selection.value);
+            }
+            const creationIndex = creationOrderRef.current.findIndex(record =>
+              selectionIncludes([selection], record),
+            );
+            if (creationIndex >= 0) {
+              creationOrderRef.current.splice(creationIndex, 1);
+            }
           }
-          removeByReference(creationOrderRef.current, selectionRef.current);
-          selectionRef.current = null;
+          selectionRef.current = [];
           dragRef.current = null;
           activePointerIdRef.current = null;
           renderCanvas(
@@ -865,8 +921,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       if (activeTool === "select") {
         const currentSelection = selectionRef.current;
         const context = canvasRef.current?.getContext("2d");
-        if (currentSelection && context) {
-          const hoveredHandle = findResizeHandleAtPoint(context, point, currentSelection);
+        if (currentSelection.length === 1 && context) {
+          const hoveredHandle = findResizeHandleAtPoint(context, point, currentSelection[0]!);
           if (hoveredHandle === "top-left" || hoveredHandle === "bottom-right") {
             event.currentTarget.style.cursor = "nwse-resize";
           } else if (hoveredHandle === "top-right" || hoveredHandle === "bottom-left") {
@@ -886,6 +942,30 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "select") {
+      const multiDrag = multiDragRef.current;
+      if (multiDrag) {
+        const deltaX = point.x - multiDrag.pointerStart.x;
+        const deltaY = point.y - multiDrag.pointerStart.y;
+        multiDrag.selections.forEach((selection, index) => {
+          const original = multiDrag.originals[index];
+          if (original) {
+            moveSelection(selection, original, deltaX, deltaY);
+          }
+        });
+        multiDrag.moved = multiDrag.moved || deltaX !== 0 || deltaY !== 0;
+        renderCanvas(
+          canvasRef.current,
+          strokesRef.current,
+          elementsRef.current,
+          null,
+          null,
+          null,
+          selectionRef.current,
+          viewportRef.current,
+        );
+        return;
+      }
+
       const drag = dragRef.current;
 
       if (drag) {
@@ -1002,6 +1082,34 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "select") {
+      const multiDrag = multiDragRef.current;
+      if (multiDrag) {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        if (!multiDrag.moved) {
+          selectionRef.current = [multiDrag.clicked];
+          notifyLayerChange();
+        }
+        multiDragRef.current = null;
+        dragRef.current = null;
+        activePointerIdRef.current = null;
+        renderCanvas(
+          canvasRef.current,
+          strokesRef.current,
+          elementsRef.current,
+          null,
+          null,
+          null,
+          selectionRef.current,
+          viewportRef.current,
+        );
+        if (multiDrag.moved) {
+          addHistory();
+        }
+        return;
+      }
+
       dragRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -1075,6 +1183,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         removeByReference(elementsRef.current, record.value);
       }
       creationOrderRef.current.splice(index, 1);
+      selectionRef.current = selectionRef.current.filter(selection => !selectionIncludes([record], selection));
+      notifyLayerChange();
       renderCanvas(
         canvasRef.current,
         strokesRef.current,

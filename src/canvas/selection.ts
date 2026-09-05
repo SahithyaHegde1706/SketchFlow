@@ -1,4 +1,4 @@
-import type { Bounds, Point, ResizeHandle, Selection } from "@/types/canvas";
+import type { Bounds, Point, ResizeHandle, Selection, SelectionSet } from "@/types/canvas";
 import { getBounds, getStrokeBounds } from "./geometry";
 
 export function getSelectionBounds(
@@ -52,8 +52,29 @@ export function getSelectionBounds(
   }
 }
 
-export function drawSelection(context: CanvasRenderingContext2D, selection: Selection) {
-  const bounds = getSelectionBounds(context, selection);
+export function getCombinedSelectionBounds(
+  context: CanvasRenderingContext2D,
+  selections: SelectionSet,
+): Bounds {
+  return selections.reduce(
+    (bounds, selection) => {
+      const selectionBounds = getSelectionBounds(context, selection);
+      return {
+        left: Math.min(bounds.left, selectionBounds.left),
+        top: Math.min(bounds.top, selectionBounds.top),
+        right: Math.max(bounds.right, selectionBounds.right),
+        bottom: Math.max(bounds.bottom, selectionBounds.bottom),
+      };
+    },
+    { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity },
+  );
+}
+
+function drawSelectionBounds(
+  context: CanvasRenderingContext2D,
+  bounds: Bounds,
+  drawHandles: boolean,
+) {
   const padding = 6;
 
   context.save();
@@ -69,6 +90,11 @@ export function drawSelection(context: CanvasRenderingContext2D, selection: Sele
   context.beginPath();
   context.rect(left, top, width, height);
   context.stroke();
+
+  if (!drawHandles) {
+    context.restore();
+    return;
+  }
 
   context.setLineDash([]);
   context.fillStyle = "#e5e7eb";
@@ -91,6 +117,23 @@ export function drawSelection(context: CanvasRenderingContext2D, selection: Sele
   }
 
   context.restore();
+}
+
+export function drawSelection(context: CanvasRenderingContext2D, selection: Selection | SelectionSet) {
+  const selections = Array.isArray(selection) ? selection : [selection];
+  if (selections.length === 0) {
+    return;
+  }
+
+  if (selections.length === 1) {
+    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!), true);
+    return;
+  }
+
+  for (const item of selections) {
+    drawSelectionBounds(context, getSelectionBounds(context, item), false);
+  }
+  drawSelectionBounds(context, getCombinedSelectionBounds(context, selections), false);
 }
 
 export function findResizeHandleAtPoint(

@@ -1,8 +1,8 @@
-import type { Selection, WhiteboardElement } from "@/types/canvas";
+import type { Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
 import type { ClipboardState } from "./types";
 
-export function copyToClipboard(selection: Selection | null): ClipboardState {
-  if (!selection) {
+export function copyToClipboard(selection: SelectionSet): ClipboardState {
+  if (selection.length === 0) {
     return { item: null };
   }
 
@@ -12,7 +12,7 @@ export function copyToClipboard(selection: Selection | null): ClipboardState {
   };
 }
 
-export function getClipboard(state: ClipboardState): Selection | null {
+export function getClipboard(state: ClipboardState): SelectionSet | null {
   if (!state.item) {
     return null;
   }
@@ -60,4 +60,8 @@ export function offsetSelection(selection: Selection, offsetAmount: number = 20)
   }
 
   return { kind: "element", value: newElement };
+}
+
+export function offsetSelections(selections: SelectionSet, offsetAmount: number = 20): SelectionSet {
+  return selections.map(selection => offsetSelection(selection, offsetAmount));
 }
