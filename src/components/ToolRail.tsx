@@ -1,4 +1,4 @@
-import type { Tool } from "@/components/whiteboard/types";
+import type { Tool } from "@/types/canvas";
 
 const tools = [
   { label: "Select", icon: "↖", value: "select" },

@@ -25,6 +25,7 @@ import { findResizeHandleAtPoint } from "@/canvas/selection";
 import { screenToLogical, zoomViewport } from "@/canvas/geometry";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
+import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
 import { moveSelection } from "@/editor/movement";
 import { resizeSelection } from "@/editor/resizing";
 import { ZoomControls } from "@/components/ZoomControls";
@@ -43,16 +44,21 @@ import type { ClipboardState } from "@/clipboard/types";
 
 type BoardCanvasProps = {
   activeTool: Tool;
+  onToolSelect: (tool: Tool) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
+  onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
 };
 
 export type BoardCanvasHandle = {
   undo: () => void;
   redo: () => void;
+  copy: () => void;
+  paste: () => void;
+  duplicate: () => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, onHistoryChange }, ref) => {
+  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -62,6 +68,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0, scale: 1 });
   const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
+  const clipboardRef = useRef<ClipboardState>({ item: null });
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
   const activeCircleRef = useRef<CircleElement | null>(null);
@@ -74,6 +81,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const [zoom, setZoom] = useState(1);
   const activePointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryState | null>(null);
+  const activeToolRef = useRef(activeTool);
+  activeToolRef.current = activeTool;
 
   const addHistory = () => {
     if (!historyRef.current) return;
@@ -145,9 +154,67 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   };
 
+  const notifyClipboardChange = () => {
+    onClipboardChange?.(
+      !!selectionRef.current, // canCopy
+      !!clipboardRef.current.item, // canPaste
+      !!selectionRef.current, // canDuplicate
+    );
+  };
+
+  const handleCopy = () => {
+    clipboardRef.current = copyToClipboard(selectionRef.current);
+    notifyClipboardChange();
+  };
+
+  const handlePaste = () => {
+    if (!clipboardRef.current.item) return;
+    const newSelection = offsetSelection(clipboardRef.current.item, 20);
+    
+    if (newSelection.kind === "stroke") {
+      strokesRef.current.push(newSelection.value);
+    } else {
+      elementsRef.current.push(newSelection.value);
+    }
+    creationOrderRef.current.push(newSelection);
+    selectionRef.current = newSelection;
+    
+    renderCanvas(
+      canvasRef.current, strokesRef.current, elementsRef.current,
+      activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+      selectionRef.current, viewportRef.current,
+    );
+    addHistory();
+    notifyClipboardChange();
+  };
+
+  const handleDuplicate = () => {
+    if (!selectionRef.current) return;
+    const newSelection = offsetSelection(selectionRef.current, 20);
+    
+    if (newSelection.kind === "stroke") {
+      strokesRef.current.push(newSelection.value);
+    } else {
+      elementsRef.current.push(newSelection.value);
+    }
+    creationOrderRef.current.push(newSelection);
+    selectionRef.current = newSelection;
+    
+    renderCanvas(
+      canvasRef.current, strokesRef.current, elementsRef.current,
+      activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+      selectionRef.current, viewportRef.current,
+    );
+    addHistory();
+    notifyClipboardChange();
+  };
+
   useImperativeHandle(ref, () => ({
     undo: handleUndo,
     redo: handleRedo,
+    copy: handleCopy,
+    paste: handlePaste,
+    duplicate: handleDuplicate,
   }));
 
   useEffect(() => {
@@ -190,8 +257,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       window.removeEventListener("resize", resizeCanvas);
     };
   }, []);
-
-
 
   const getPoint = (
     event: PointerEvent<HTMLCanvasElement> | MouseEvent<HTMLCanvasElement>,
@@ -446,6 +511,182 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       cancelText();
     }
   };
+
+  const cancelInteraction = () => {
+    const canvas = canvasRef.current;
+    const pointerId = activePointerIdRef.current;
+
+    if (activeStrokeRef.current) {
+      const activeStroke = activeStrokeRef.current;
+      removeByReference(strokesRef.current, activeStroke);
+      const creationIndex = creationOrderRef.current.findIndex(
+        record => record.kind === "stroke" && record.value === activeStroke,
+      );
+      if (creationIndex >= 0) {
+        creationOrderRef.current.splice(creationIndex, 1);
+      }
+      activeStrokeRef.current = null;
+    }
+
+    if (dragRef.current) {
+      const { selection, original } = dragRef.current;
+      if (selection.kind === "stroke" && Array.isArray(original)) {
+        selection.value.splice(0, selection.value.length, ...original.map(point => ({ ...point })));
+      } else if (selection.kind === "element" && !Array.isArray(original)) {
+        Object.assign(selection.value, original);
+      }
+      dragRef.current = null;
+    }
+
+    if (panRef.current) {
+      viewportRef.current = {
+        ...viewportRef.current,
+        offsetX: panRef.current.originOffsetX,
+        offsetY: panRef.current.originOffsetY,
+      };
+      panRef.current = null;
+    }
+
+    activeRectangleRef.current = null;
+    activeRectangleStartRef.current = null;
+    activeCircleRef.current = null;
+    activeCircleStartRef.current = null;
+    activeArrowRef.current = null;
+    activeArrowStartRef.current = null;
+
+    if (canvas && pointerId !== null && canvas.hasPointerCapture(pointerId)) {
+      canvas.releasePointerCapture(pointerId);
+    }
+    activePointerIdRef.current = null;
+    if (canvas) canvas.style.cursor = activeToolRef.current === "hand" ? "grab" : "";
+
+    renderCanvas(
+      canvas,
+      strokesRef.current,
+      elementsRef.current,
+      null,
+      null,
+      null,
+      selectionRef.current,
+      viewportRef.current,
+    );
+  };
+
+  const keyboardActionsRef = useRef({
+    addHistory,
+    cancelInteraction,
+    handleCopy,
+    handleDuplicate,
+    handlePaste,
+    handleRedo,
+    handleUndo,
+    notifyClipboardChange,
+    onToolSelect,
+  });
+  keyboardActionsRef.current = {
+    addHistory,
+    cancelInteraction,
+    handleCopy,
+    handleDuplicate,
+    handlePaste,
+    handleRedo,
+    handleUndo,
+    notifyClipboardChange,
+    onToolSelect,
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      const actions = keyboardActionsRef.current;
+      if (isTextEditingTarget(event.target)) {
+        return;
+      }
+
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (textEditorRef.current) {
+          cancelText();
+        } else if (activePointerIdRef.current !== null || dragRef.current || activeStrokeRef.current) {
+          actions.cancelInteraction();
+        } else {
+          selectionRef.current = null;
+          renderCanvas(
+            canvasRef.current,
+            strokesRef.current,
+            elementsRef.current,
+            null,
+            null,
+            null,
+            selectionRef.current,
+            viewportRef.current,
+          );
+          actions.notifyClipboardChange();
+        }
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        if (selectionRef.current) {
+          event.preventDefault();
+          if (selectionRef.current.kind === "stroke") {
+            removeByReference(strokesRef.current, selectionRef.current.value);
+          } else {
+            removeByReference(elementsRef.current, selectionRef.current.value);
+          }
+          removeByReference(creationOrderRef.current, selectionRef.current);
+          selectionRef.current = null;
+          dragRef.current = null;
+          activePointerIdRef.current = null;
+          renderCanvas(
+            canvasRef.current, strokesRef.current, elementsRef.current,
+            activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+            selectionRef.current, viewportRef.current,
+          );
+          actions.addHistory();
+          actions.notifyClipboardChange();
+        }
+        return;
+      }
+
+      const isMac = navigator.userAgent.toLowerCase().includes("mac");
+      const modifierKey = isMac ? event.metaKey : event.ctrlKey;
+      if (modifierKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) actions.handleRedo();
+        else actions.handleUndo();
+        return;
+      }
+      if (modifierKey && event.key.toLowerCase() === "c") {
+        event.preventDefault();
+        actions.handleCopy();
+        return;
+      }
+      if (modifierKey && event.key.toLowerCase() === "v") {
+        event.preventDefault();
+        actions.handlePaste();
+        return;
+      }
+      if (modifierKey && event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        actions.handleDuplicate();
+        return;
+      }
+      if (hasShortcutModifier(event)) {
+        return;
+      }
+
+      const tool = getToolForShortcut(event.key);
+      if (!tool) return;
+      event.preventDefault();
+      if (activePointerIdRef.current !== null || dragRef.current || activeStrokeRef.current) {
+        actions.cancelInteraction();
+      }
+      actions.onToolSelect(tool);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     const screenPoint = getPoint(event);

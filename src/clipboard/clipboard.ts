@@ -56,7 +56,7 @@ export function offsetSelection(selection: Selection, offsetAmount: number = 20)
     };
   } else {
     // Fallback
-    newElement = { ...element, id: newId };
+    newElement = { ...(element as WhiteboardElement), id: newId };
   }
 
   return { kind: "element", value: newElement };
