@@ -137,3 +137,13 @@ export type RotationState = {
   initialPointerAngle: number;
   moved: boolean;
 };
+
+export type AlignOperation =
+  | "align-left"
+  | "align-center"
+  | "align-right"
+  | "align-top"
+  | "align-middle"
+  | "align-bottom"
+  | "distribute-horizontal"
+  | "distribute-vertical";

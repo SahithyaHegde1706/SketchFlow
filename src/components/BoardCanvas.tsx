@@ -22,6 +22,7 @@ import type {
   Tool,
   Viewport,
   WhiteboardElement,
+  AlignOperation,
 } from "@/types/canvas";
 import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
@@ -58,6 +59,7 @@ type BoardCanvasProps = {
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
   onLayerChange?: (availability: LayerAvailability) => void;
   onGroupAvailabilityChange?: (canGroup: boolean, canUngroup: boolean) => void;
+  onAlignAvailabilityChange?: (canAlign: boolean, canDistribute: boolean) => void;
 };
 
 export type BoardCanvasHandle = {
@@ -69,10 +71,11 @@ export type BoardCanvasHandle = {
   applyLayerOperation: (operation: LayerOperation) => void;
   group: () => void;
   ungroup: () => void;
+  align: (operation: AlignOperation) => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange }, ref) => {
+  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -247,6 +250,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     const canUngroup = getSelectedGroups(selectionRef.current).length > 0;
     
     onGroupAvailabilityChange?.(canGroup, canUngroup);
+    onAlignAvailabilityChange?.(selectionRef.current.length >= 2, selectionRef.current.length >= 3);
   };
 
   const handleGroup = () => {
@@ -363,6 +367,28 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     notifyLayerChange();
   };
 
+  const handleAlign = async (operation: AlignOperation) => {
+    if (selectionRef.current.length < 2) return;
+    const context = canvasRef.current?.getContext("2d");
+    if (!context) return;
+    
+    const { alignSelection } = await import("@/editor/alignment");
+    
+    // clone all currently selected objects as originals
+    const originals = selectionRef.current.map(selection => cloneSelectionValue(selection));
+    
+    const moved = alignSelection(context, selectionRef.current, originals, operation, elementsRef.current);
+    
+    if (moved) {
+      renderCanvas(
+        canvasRef.current, strokesRef.current, elementsRef.current,
+        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        selectionRef.current, viewportRef.current,
+      );
+      addHistory();
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     undo: handleUndo,
     redo: handleRedo,
@@ -372,6 +398,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     applyLayerOperation: handleLayerOperation,
     group: handleGroup,
     ungroup: handleUngroup,
+    align: handleAlign,
   }));
 
   useEffect(() => {

@@ -19,6 +19,7 @@ export default function Home() {
     canSendToBack: false,
   });
   const [groupAvailability, setGroupAvailability] = useState({ canGroup: false, canUngroup: false });
+  const [alignAvailability, setAlignAvailability] = useState({ canAlign: false, canDistribute: false });
   const boardRef = useRef<BoardCanvasHandle>(null);
 
   return (
@@ -34,6 +35,9 @@ export default function Home() {
         canUngroup={groupAvailability.canUngroup}
         onGroup={() => boardRef.current?.group()}
         onUngroup={() => boardRef.current?.ungroup()}
+        canAlign={alignAvailability.canAlign}
+        canDistribute={alignAvailability.canDistribute}
+        onAlign={(operation) => boardRef.current?.align(operation)}
       />
       <div className="relative flex min-h-0 flex-1">
         <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} />
@@ -44,6 +48,7 @@ export default function Home() {
           onHistoryChange={(canUndo, canRedo) => setHistoryStatus({ canUndo, canRedo })}
           onLayerChange={setLayerAvailability}
           onGroupAvailabilityChange={(canGroup, canUngroup) => setGroupAvailability({ canGroup, canUngroup })}
+          onAlignAvailabilityChange={(canAlign, canDistribute) => setAlignAvailability({ canAlign, canDistribute })}
         />
       </div>
     </main>
