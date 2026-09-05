@@ -5,12 +5,19 @@ import { BoardCanvas } from "@/components/BoardCanvas";
 import type { BoardCanvasHandle } from "@/components/BoardCanvas";
 import { BoardHeader } from "@/components/BoardHeader";
 import { ToolRail } from "@/components/ToolRail";
+import { LayersPanel } from "@/components/LayersPanel";
 import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 
-import type { Tool } from "@/types/canvas";
+import type { Tool, CreationRecord, Group, SelectionSet } from "@/types/canvas";
 
 export default function Home() {
   const [activeTool, setActiveTool] = useState<Tool>("select");
+  const [isLayersOpen, setIsLayersOpen] = useState(false);
+  const [documentState, setDocumentState] = useState({
+    records: [] as CreationRecord[],
+    groups: [] as Group[],
+    selections: [] as SelectionSet
+  });
   const [historyStatus, setHistoryStatus] = useState({ canUndo: false, canRedo: false });
   const [layerAvailability, setLayerAvailability] = useState<LayerAvailability>({
     canBringForward: false,
@@ -38,8 +45,10 @@ export default function Home() {
         canAlign={alignAvailability.canAlign}
         canDistribute={alignAvailability.canDistribute}
         onAlign={(operation) => boardRef.current?.align(operation)}
+        isLayersOpen={isLayersOpen}
+        onToggleLayers={() => setIsLayersOpen(!isLayersOpen)}
       />
-      <div className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} />
         <BoardCanvas
           ref={boardRef}
@@ -49,6 +58,17 @@ export default function Home() {
           onLayerChange={setLayerAvailability}
           onGroupAvailabilityChange={(canGroup, canUngroup) => setGroupAvailability({ canGroup, canUngroup })}
           onAlignAvailabilityChange={(canAlign, canDistribute) => setAlignAvailability({ canAlign, canDistribute })}
+          onDocumentChange={(records, groups, selections) => setDocumentState({ records, groups, selections })}
+        />
+        <LayersPanel
+          isOpen={isLayersOpen}
+          onClose={() => setIsLayersOpen(false)}
+          records={documentState.records}
+          groups={documentState.groups}
+          selections={documentState.selections}
+          onSelect={(selections) => boardRef.current?.setSelection(selections)}
+          onDelete={() => boardRef.current?.deleteSelection()}
+          onLayerOperation={(op) => boardRef.current?.applyLayerOperation(op)}
         />
       </div>
     </main>

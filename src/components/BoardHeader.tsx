@@ -18,6 +18,8 @@ type BoardHeaderProps = {
   canAlign?: boolean;
   canDistribute?: boolean;
   onAlign?: (operation: AlignOperation) => void;
+  isLayersOpen: boolean;
+  onToggleLayers: () => void;
 };
 
 const MoreIcon = () => <span aria-hidden="true">...</span>;
@@ -36,6 +38,8 @@ export function BoardHeader({
   canAlign = false,
   canDistribute = false,
   onAlign,
+  isLayersOpen,
+  onToggleLayers,
 }: BoardHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7">
@@ -105,6 +109,24 @@ export function BoardHeader({
         >
           <span aria-hidden="true" className="text-base leading-none">↗</span>
           <span className="hidden sm:inline">Share</span>
+        </button>
+        <button
+          type="button"
+          onClick={onToggleLayers}
+          aria-label={isLayersOpen ? "Close layers panel" : "Open layers panel"}
+          title="Layers"
+          className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
+            isLayersOpen
+              ? "border-teal-300 bg-teal-50 text-teal-800"
+              : "border-slate-200 bg-white text-slate-700 shadow-sm hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800"
+          }`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+            <polyline points="2 12 12 17 22 12" />
+            <polyline points="2 17 12 22 22 17" />
+          </svg>
+          <span className="hidden sm:inline">Layers</span>
         </button>
         <button
           type="button"

@@ -60,6 +60,7 @@ type BoardCanvasProps = {
   onLayerChange?: (availability: LayerAvailability) => void;
   onGroupAvailabilityChange?: (canGroup: boolean, canUngroup: boolean) => void;
   onAlignAvailabilityChange?: (canAlign: boolean, canDistribute: boolean) => void;
+  onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
 };
 
 export type BoardCanvasHandle = {
@@ -68,6 +69,8 @@ export type BoardCanvasHandle = {
   copy: () => void;
   paste: () => void;
   duplicate: () => void;
+  deleteSelection: () => void;
+  setSelection: (selections: SelectionSet) => void;
   applyLayerOperation: (operation: LayerOperation) => void;
   group: () => void;
   ungroup: () => void;
@@ -75,7 +78,7 @@ export type BoardCanvasHandle = {
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange }, ref) => {
+  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onDocumentChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -235,10 +238,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           ],
         };
       }
-    }
-    onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
-    notifyGroupAvailabilityChange();
-  };
+      }
+      onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
+      notifyGroupAvailabilityChange();
+      onDocumentChange?.([...creationOrderRef.current], [...groupsRef.current], [...selectionRef.current]);
+    };
 
   const notifyGroupAvailabilityChange = () => {
     const elementIds = selectionRef.current
@@ -389,12 +393,54 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   };
 
+  const handleSetSelection = (selections: SelectionSet) => {
+    selectionRef.current = [...selections];
+    renderCanvas(
+      canvasRef.current, strokesRef.current, elementsRef.current,
+      activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+      selectionRef.current, viewportRef.current,
+    );
+    notifyLayerChange();
+  };
+
+  const handleDeleteSelection = () => {
+    if (selectionRef.current.length > 0) {
+      for (const selection of selectionRef.current) {
+        if (selection.kind === "stroke") {
+          removeByReference(strokesRef.current, selection.value);
+        } else if (selection.kind === "group") {
+          selection.value.elementIds.forEach(id => {
+            const element = elementsRef.current.find(e => e.id === id);
+            if (element) {
+              removeByReference(elementsRef.current, element);
+            }
+          });
+          groupsRef.current = groupsRef.current.filter(g => g.id !== selection.value.id);
+        } else {
+          removeByReference(elementsRef.current, selection.value);
+          removeElementFromGroups(selection.value.id, groupsRef.current);
+        }
+      }
+      creationOrderRef.current = creationOrderRef.current.filter(record => !selectionIncludes(selectionRef.current, record as Selection));
+      selectionRef.current = [];
+      renderCanvas(
+        canvasRef.current, strokesRef.current, elementsRef.current,
+        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        selectionRef.current, viewportRef.current,
+      );
+      addHistory();
+      notifyLayerChange();
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     undo: handleUndo,
     redo: handleRedo,
     copy: handleCopy,
     paste: handlePaste,
     duplicate: handleDuplicate,
+    deleteSelection: handleDeleteSelection,
+    setSelection: handleSetSelection,
     applyLayerOperation: handleLayerOperation,
     group: handleGroup,
     ungroup: handleUngroup,
@@ -882,6 +928,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     onToolSelect,
     handleGroup,
     handleUngroup,
+    deleteSelection: handleDeleteSelection,
   });
   keyboardActionsRef.current = {
     addHistory,
@@ -899,6 +946,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     onToolSelect,
     handleGroup,
     handleUngroup,
+    deleteSelection: handleDeleteSelection,
   };
 
   useEffect(() => {
@@ -935,47 +983,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
       if (event.key === "Delete" || event.key === "Backspace") {
         actions.finishKeyboardMovement();
-        if (selectionRef.current.length > 0) {
-          event.preventDefault();
-          for (const selection of selectionRef.current) {
-            if (selection.kind === "stroke") {
-              removeByReference(strokesRef.current, selection.value);
-            } else if (selection.kind === "group") {
-              // Deleting a selected group removes all its members
-              selection.value.elementIds.forEach(id => {
-                const element = elementsRef.current.find(e => e.id === id);
-                if (element) {
-                  removeByReference(elementsRef.current, element);
-                  const index = creationOrderRef.current.findIndex(record => record.kind === "element" && record.value.id === id);
-                  if (index >= 0) creationOrderRef.current.splice(index, 1);
-                }
-              });
-              groupsRef.current = groupsRef.current.filter(g => g.id !== selection.value.id);
-              // don't try to find it in creationOrder
-              continue;
-            } else {
-              removeByReference(elementsRef.current, selection.value);
-              removeElementFromGroups(selection.value.id, groupsRef.current);
-            }
-            const creationIndex = creationOrderRef.current.findIndex(record =>
-              selectionIncludes([selection], record),
-            );
-            if (creationIndex >= 0) {
-              creationOrderRef.current.splice(creationIndex, 1);
-            }
-          }
-          selectionRef.current = [];
-          dragRef.current = null;
-          activePointerIdRef.current = null;
-          renderCanvas(
-            canvasRef.current, strokesRef.current, elementsRef.current,
-            activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-            selectionRef.current, viewportRef.current,
-          );
-          actions.addHistory();
-          actions.notifyClipboardChange();
-          actions.notifyLayerChange();
-        }
+        actions.deleteSelection();
         return;
       }
 
