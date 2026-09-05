@@ -12,7 +12,7 @@ import type {
   PanState,
   Point,
   RectangleElement,
-
+  Group,
   ResizeHandle,
   Selection,
   SelectionSet,
@@ -45,6 +45,7 @@ import {
   undo,
 } from "@/history/history";
 import type { HistoryState, CanvasSnapshot } from "@/history/types";
+import { groupSelection, ungroupSelection, getSelectedGroups, removeElementFromGroups } from "@/editor/grouping";
 import { copyToClipboard, offsetClipboard } from "@/clipboard/clipboard";
 import type { ClipboardState } from "@/clipboard/types";
 
@@ -54,6 +55,7 @@ type BoardCanvasProps = {
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
   onLayerChange?: (availability: LayerAvailability) => void;
+  onGroupAvailabilityChange?: (canGroup: boolean, canUngroup: boolean) => void;
 };
 
 export type BoardCanvasHandle = {
@@ -63,14 +65,16 @@ export type BoardCanvasHandle = {
   paste: () => void;
   duplicate: () => void;
   applyLayerOperation: (operation: LayerOperation) => void;
+  group: () => void;
+  ungroup: () => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange }, ref) => {
+  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
-
+  const groupsRef = useRef<Group[]>([]);
   const creationOrderRef = useRef<CreationRecord[]>([]);
   const selectionRef = useRef<SelectionSet>([]);
   const dragRef = useRef<DragState | null>(null);
@@ -99,7 +103,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (!historyRef.current) return;
     historyRef.current = record(
       historyRef.current,
-      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current)
+      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current)
     );
     onHistoryChange?.(canUndo(historyRef.current), canRedo(historyRef.current));
   };
@@ -107,22 +111,37 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const selectionIncludes = (selections: SelectionSet, candidate: Selection) =>
     selections.some(selection => selection.kind === candidate.kind && (
       selection.value === candidate.value ||
-      (selection.kind === "element" && candidate.kind === "element" && selection.value.id === candidate.value.id)
+      (selection.kind === "element" && candidate.kind === "element" && selection.value.id === candidate.value.id) ||
+      (selection.kind === "group" && candidate.kind === "group" && selection.value.id === candidate.value.id)
     ));
 
   const flattenSelection = (selections: SelectionSet): SelectionSet => {
-    return selections;
+    const flat: SelectionSet = [];
+    for (const selection of selections) {
+      if (selection.kind === "group") {
+        for (const id of selection.value.elementIds) {
+          const element = elementsRef.current.find((e) => e.id === id);
+          if (element && !flat.some((f) => f.kind === "element" && f.value.id === id)) {
+            flat.push({ kind: "element", value: element });
+          }
+        }
+      } else {
+        flat.push(selection);
+      }
+    }
+    return flat;
   };
 
   useEffect(() => {
     historyRef.current = createHistory(
-      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, [])
+      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, [], groupsRef.current)
     );
   }, []);
 
   const applySnapshot = (snapshot: CanvasSnapshot) => {
     strokesRef.current = JSON.parse(JSON.stringify(snapshot.strokes));
     elementsRef.current = JSON.parse(JSON.stringify(snapshot.elements));
+    groupsRef.current = JSON.parse(JSON.stringify(snapshot.groups));
     const restoredCreationOrder = JSON.parse(JSON.stringify(snapshot.creationOrder)) as CreationRecord[];
     let restoredStrokeIndex = 0;
     creationOrderRef.current = restoredCreationOrder
@@ -146,6 +165,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         continue;
       }
 
+      if (selection.kind === "group") {
+        const group = groupsRef.current.find(item => item.id === selection.id);
+        if (group) restoredSelection.push({ kind: "group", value: group });
+        continue;
+      }
 
       const element = elementsRef.current.find(item => item.id === selection.id);
       if (element) restoredSelection.push({ kind: "element", value: element });
@@ -207,11 +231,51 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       }
     }
     onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
+    notifyGroupAvailabilityChange();
   };
 
+  const notifyGroupAvailabilityChange = () => {
+    const elementIds = selectionRef.current
+      .filter((item): item is Extract<Selection, { kind: "element" }> => item.kind === "element")
+      .map(item => item.value.id)
+      .filter((id, index, ids) => ids.indexOf(id) === index);
+    
+    const canGroup = elementIds.length >= 2 && !elementIds.some(id => groupsRef.current.some(g => g.elementIds.includes(id)));
+    const canUngroup = getSelectedGroups(selectionRef.current).length > 0;
+    
+    onGroupAvailabilityChange?.(canGroup, canUngroup);
+  };
 
+  const handleGroup = () => {
+    const group = groupSelection(selectionRef.current, elementsRef.current, groupsRef.current);
+    if (group) {
+      selectionRef.current = [{ kind: "group", value: group }];
+      renderCanvas(
+        canvasRef.current, strokesRef.current, elementsRef.current,
+        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        selectionRef.current, viewportRef.current,
+      );
+      addHistory();
+      notifyLayerChange();
+    }
+  };
 
-
+  const handleUngroup = () => {
+    const ungroupedIds = ungroupSelection(selectionRef.current, groupsRef.current);
+    if (ungroupedIds.length > 0) {
+      selectionRef.current = ungroupedIds
+        .map(id => elementsRef.current.find(e => e.id === id))
+        .filter((e): e is WhiteboardElement => !!e)
+        .map(element => ({ kind: "element", value: element }));
+      renderCanvas(
+        canvasRef.current, strokesRef.current, elementsRef.current,
+        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        selectionRef.current, viewportRef.current,
+      );
+      addHistory();
+      notifyLayerChange();
+    }
+  };
 
   const handleLayerOperation = (operation: LayerOperation) => {
     if (!applyLayerOperation(creationOrderRef.current, selectionRef.current, operation)) {
@@ -233,18 +297,19 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   };
 
   const handleCopy = () => {
-    clipboardRef.current = copyToClipboard(selectionRef.current, elementsRef.current);
+    clipboardRef.current = copyToClipboard(selectionRef.current, elementsRef.current, groupsRef.current);
     notifyClipboardChange();
   };
 
   const handlePaste = () => {
     if (!clipboardRef.current.item) return;
-    const { selections, elements } = offsetClipboard(clipboardRef.current.item, 20);
+    const { selections, elements, groups } = offsetClipboard(clipboardRef.current.item, 20);
 
     for (const item of elements) {
       elementsRef.current.push(item);
       creationOrderRef.current.push({ kind: "element", value: item });
     }
+    for (const group of groups) groupsRef.current.push(group);
     for (const sel of selections) {
       if (sel.kind === "stroke") {
         strokesRef.current.push(sel.value);
@@ -267,15 +332,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (selectionRef.current.length === 0) return;
     
     // Create temporary clipboard state for duplication
-    const tempClipboard = copyToClipboard(selectionRef.current, elementsRef.current);
+    const tempClipboard = copyToClipboard(selectionRef.current, elementsRef.current, groupsRef.current);
     if (!tempClipboard.item) return;
     
-    const { selections, elements } = offsetClipboard(tempClipboard.item, 20);
+    const { selections, elements, groups } = offsetClipboard(tempClipboard.item, 20);
 
     for (const item of elements) {
       elementsRef.current.push(item);
       creationOrderRef.current.push({ kind: "element", value: item });
     }
+    for (const group of groups) groupsRef.current.push(group);
     for (const sel of selections) {
       if (sel.kind === "stroke") {
         strokesRef.current.push(sel.value);
@@ -301,7 +367,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     paste: handlePaste,
     duplicate: handleDuplicate,
     applyLayerOperation: handleLayerOperation,
-
+    group: handleGroup,
+    ungroup: handleUngroup,
   }));
 
   useEffect(() => {
@@ -473,7 +540,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       } else {
         const wasSelected = selectionIncludes(currentSelection, clickedSelection);
         const activeSelection = wasSelected ? currentSelection : [clickedSelection];
-        const isGroupOrMulti = activeSelection.length > 1;
+        const isGroupOrMulti = activeSelection.length > 1 || activeSelection.some((s) => s.kind === "group");
 
         if (isGroupOrMulti) {
           const flatSelections = flattenSelection(activeSelection);
@@ -751,6 +818,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     notifyClipboardChange,
     notifyLayerChange,
     onToolSelect,
+    handleGroup,
+    handleUngroup,
   });
   keyboardActionsRef.current = {
     addHistory,
@@ -766,6 +835,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     notifyClipboardChange,
     notifyLayerChange,
     onToolSelect,
+    handleGroup,
+    handleUngroup,
   };
 
   useEffect(() => {
@@ -807,8 +878,22 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           for (const selection of selectionRef.current) {
             if (selection.kind === "stroke") {
               removeByReference(strokesRef.current, selection.value);
+            } else if (selection.kind === "group") {
+              // Deleting a selected group removes all its members
+              selection.value.elementIds.forEach(id => {
+                const element = elementsRef.current.find(e => e.id === id);
+                if (element) {
+                  removeByReference(elementsRef.current, element);
+                  const index = creationOrderRef.current.findIndex(record => record.kind === "element" && record.value.id === id);
+                  if (index >= 0) creationOrderRef.current.splice(index, 1);
+                }
+              });
+              groupsRef.current = groupsRef.current.filter(g => g.id !== selection.value.id);
+              // don't try to find it in creationOrder
+              continue;
             } else {
               removeByReference(elementsRef.current, selection.value);
+              removeElementFromGroups(selection.value.id, groupsRef.current);
             }
             const creationIndex = creationOrderRef.current.findIndex(record =>
               selectionIncludes([selection], record),
@@ -870,6 +955,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         actions.finishKeyboardMovement();
         event.preventDefault();
         actions.handleDuplicate();
+        return;
+      }
+      if (modifierKey && event.key.toLowerCase() === "g") {
+        actions.finishKeyboardMovement();
+        event.preventDefault();
+        if (event.shiftKey) actions.handleUngroup();
+        else actions.handleGroup();
         return;
       }
       if (hasShortcutModifier(event)) {
@@ -1004,7 +1096,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (drag.type === "resize" && drag.handle) {
           resizeSelection(
             drag.selection,
-            drag.original,
+            drag.original as FreehandStroke | WhiteboardElement,
             point.x - drag.pointerStart.x,
             point.y - drag.pointerStart.y,
             drag.handle,
@@ -1213,9 +1305,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         removeByReference(strokesRef.current, record.value);
       } else {
         removeByReference(elementsRef.current, record.value);
+        removeElementFromGroups(record.value.id, groupsRef.current);
       }
       creationOrderRef.current.splice(index, 1);
-      selectionRef.current = selectionRef.current.filter(selection => !selectionIncludes([record], selection));
+      
+      // Also need to remove the group from selection if it was dissolved or erased
+      selectionRef.current = selectionRef.current.filter(selection => {
+        if (selectionIncludes([record], selection)) return false;
+        if (selection.kind === "group" && !groupsRef.current.some(g => g.id === selection.value.id)) return false;
+        return true;
+      });
       notifyLayerChange();
       renderCanvas(
         canvasRef.current,

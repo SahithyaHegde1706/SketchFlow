@@ -1,5 +1,6 @@
 import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 import { LayerControls } from "@/components/LayerControls";
+import { GroupControls } from "@/components/GroupControls";
 
 type BoardHeaderProps = {
   canUndo?: boolean;
@@ -8,6 +9,10 @@ type BoardHeaderProps = {
   onRedo?: () => void;
   layerAvailability: LayerAvailability;
   onLayerOperation: (operation: LayerOperation) => void;
+  canGroup?: boolean;
+  canUngroup?: boolean;
+  onGroup?: () => void;
+  onUngroup?: () => void;
 };
 
 const MoreIcon = () => <span aria-hidden="true">...</span>;
@@ -19,6 +24,10 @@ export function BoardHeader({
   onRedo,
   layerAvailability,
   onLayerOperation,
+  canGroup = false,
+  canUngroup = false,
+  onGroup,
+  onUngroup,
 }: BoardHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7">
@@ -41,6 +50,13 @@ export function BoardHeader({
         </span>
 
         <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block" />
+
+        <GroupControls
+          canGroup={canGroup}
+          canUngroup={canUngroup}
+          onGroup={onGroup || (() => {})}
+          onUngroup={onUngroup || (() => {})}
+        />
 
         <LayerControls {...layerAvailability} onLayerOperation={onLayerOperation} />
 

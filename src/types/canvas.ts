@@ -54,10 +54,15 @@ export type WhiteboardElement =
   | ArrowElement
   | TextElement;
 
+export type Group = {
+  id: string;
+  elementIds: string[];
+};
 
 export type Selection =
   | { kind: "stroke"; value: FreehandStroke }
-  | { kind: "element"; value: WhiteboardElement };
+  | { kind: "element"; value: WhiteboardElement }
+  | { kind: "group"; value: Group };
 
 export type SelectionSet = Selection[];
 
@@ -86,14 +91,14 @@ export type ResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-ri
 export type DragState = {
   selection: Selection;
   pointerStart: Point;
-  original: FreehandStroke | WhiteboardElement;
+  original: FreehandStroke | WhiteboardElement | Group;
   type: "move" | "resize";
   handle?: ResizeHandle;
 };
 
 export type MultiDragState = {
   selections: Selection[];
-  originals: (FreehandStroke | WhiteboardElement)[];
+  originals: (FreehandStroke | WhiteboardElement | Group)[];
   pointerStart: Point;
   clicked: Selection;
   moved: boolean;

@@ -1,4 +1,4 @@
-import type { ArrowElement, CircleElement, Point, RectangleElement, Selection, FreehandStroke, WhiteboardElement } from "@/types/canvas";
+import type { ArrowElement, CircleElement, Group, Point, RectangleElement, Selection, FreehandStroke, WhiteboardElement } from "@/types/canvas";
 import { STROKE_COLOR, STROKE_WIDTH } from "@/canvas/renderer";
 
 export function createRectangle(start: Point, end: Point): RectangleElement {
@@ -40,7 +40,11 @@ export function createArrow(start: Point, end: Point): ArrowElement {
   };
 }
 
-export function cloneSelectionValue(selection: Selection): FreehandStroke | WhiteboardElement {
+export function cloneSelectionValue(selection: Selection): FreehandStroke | WhiteboardElement | Group {
+  if (selection.kind === "group") {
+    return { ...selection.value, elementIds: [...selection.value.elementIds] };
+  }
+
   return selection.kind === "stroke"
     ? selection.value.map((point) => ({ ...point }))
     : { ...selection.value };

@@ -1,7 +1,7 @@
-import type { Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { Group, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
 import type { ClipboardState } from "./types";
 
-export function copyToClipboard(selection: SelectionSet, elements: WhiteboardElement[]): ClipboardState {
+export function copyToClipboard(selection: SelectionSet, elements: WhiteboardElement[], groups: Group[]): ClipboardState {
   if (selection.length === 0) {
     return { item: null };
   }
@@ -9,11 +9,14 @@ export function copyToClipboard(selection: SelectionSet, elements: WhiteboardEle
   // Deep clone to safely disconnect object references
   const selectedElementIds = new Set(selection.flatMap(item => {
     if (item.kind === "element") return [item.value.id];
+    if (item.kind === "group") return item.value.elementIds;
     return [];
   }));
+  const selectedGroups = groups.filter(group => selection.some(item => item.kind === "group" && item.value.id === group.id));
   return { item: JSON.parse(JSON.stringify({
     selections: selection,
     elements: elements.filter(element => selectedElementIds.has(element.id)),
+    groups: selectedGroups,
   })) };
 }
 
@@ -38,6 +41,9 @@ export function offsetSelection(selection: Selection, offsetAmount: number = 20)
     };
   }
 
+  if (selection.kind === "group") {
+    return { kind: "group", value: { ...selection.value, elementIds: [...selection.value.elementIds] } };
+  }
 
   // It's a structured element, offset position and create a new UUID
   const element = selection.value;
@@ -80,12 +86,21 @@ export function offsetClipboard(clipboard: NonNullable<ClipboardState["item"]>, 
     const copied = offsetSelection({ kind: "element", value: element }, offsetAmount);
     return { ...(copied.value as WhiteboardElement), id };
   });
+  const groups = clipboard.groups.map(group => ({
+    id: crypto.randomUUID(),
+    elementIds: group.elementIds.map(id => idMap.get(id)).filter((id): id is string => !!id),
+  }));
   const selections = clipboard.selections.map(selection => {
     if (selection.kind === "element") {
       const element = elements.find(item => item.id === idMap.get(selection.value.id));
       return element ? { kind: "element" as const, value: element } : null;
     }
+    if (selection.kind === "group") {
+      const groupIndex = clipboard.groups.findIndex(group => group.id === selection.value.id);
+      const group = groups[groupIndex];
+      return group ? { kind: "group" as const, value: group } : null;
+    }
     return offsetSelection(selection, offsetAmount);
   }).filter((selection): selection is Selection => selection !== null);
-  return { selections, elements };
+  return { selections, elements, groups };
 }

@@ -50,6 +50,18 @@ export function getSelectionBounds(
     return getStrokeBounds(selection.value);
   }
 
+  if (selection.kind === "group") {
+    return elements
+      .filter(element => selection.value.elementIds.includes(element.id))
+      .map(element => getElementBounds(context, element))
+      .reduce((bounds, elementBounds) => ({
+        left: Math.min(bounds.left, elementBounds.left),
+        top: Math.min(bounds.top, elementBounds.top),
+        right: Math.max(bounds.right, elementBounds.right),
+        bottom: Math.max(bounds.bottom, elementBounds.bottom),
+      }), { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity });
+  }
+
   return getElementBounds(context, selection.value);
 }
 
@@ -132,7 +144,7 @@ export function drawSelection(
   }
 
   if (selections.length === 1) {
-    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!, elements), true);
+    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!, elements), selections[0]!.kind !== "group");
     return;
   }
 
@@ -148,6 +160,7 @@ export function findResizeHandleAtPoint(
   selection: Selection,
   elements: WhiteboardElement[] = [],
 ): ResizeHandle | null {
+  if (selection.kind === "group") return null;
   const bounds = getSelectionBounds(context, selection, elements);
   const padding = 6;
   const handleHitSize = 16;

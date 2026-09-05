@@ -1,4 +1,4 @@
-import type { CreationRecord, FreehandStroke, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { CreationRecord, FreehandStroke, Group, SelectionSet, WhiteboardElement } from "@/types/canvas";
 import type { CanvasSnapshot, HistoryState, SelectionSnapshot } from "./types";
 
 const MAX_HISTORY = 100;
@@ -11,7 +11,9 @@ export function createSelectionSnapshot(
     if (item.kind === "stroke") {
       return { kind: "stroke", index: strokes.indexOf(item.value) };
     }
-
+    if (item.kind === "group") {
+      return { kind: "group", id: item.value.id };
+    }
     return { kind: "element", id: item.value.id };
   });
 }
@@ -21,11 +23,12 @@ export function createSnapshot(
   elements: WhiteboardElement[],
   creationOrder: CreationRecord[],
   selection: SelectionSet = [],
-
+  groups: Group[] = [],
 ): CanvasSnapshot {
   return {
     strokes: JSON.parse(JSON.stringify(strokes)),
     elements: JSON.parse(JSON.stringify(elements)),
+    groups: JSON.parse(JSON.stringify(groups)),
     creationOrder: JSON.parse(JSON.stringify(creationOrder)),
     selection: createSelectionSnapshot(strokes, selection),
   };

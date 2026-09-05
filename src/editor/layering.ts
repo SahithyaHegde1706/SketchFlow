@@ -15,7 +15,9 @@ export type LayerAvailability = {
 
 function isSelected(records: CreationRecord, selections: SelectionSet) {
   return selections.some(selection =>
-    records.kind === selection.kind && (
+    selection.kind === "group"
+      ? records.kind === "element" && selection.value.elementIds.includes(records.value.id)
+      : records.kind === selection.kind && (
       records.value === selection.value ||
       (records.kind === "element" && selection.kind === "element" && records.value.id === selection.value.id)
     )

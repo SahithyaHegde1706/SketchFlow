@@ -18,7 +18,7 @@ export default function Home() {
     canBringToFront: false,
     canSendToBack: false,
   });
-
+  const [groupAvailability, setGroupAvailability] = useState({ canGroup: false, canUngroup: false });
   const boardRef = useRef<BoardCanvasHandle>(null);
 
   return (
@@ -30,6 +30,10 @@ export default function Home() {
         onRedo={() => boardRef.current?.redo()}
         layerAvailability={layerAvailability}
         onLayerOperation={(operation: LayerOperation) => boardRef.current?.applyLayerOperation(operation)}
+        canGroup={groupAvailability.canGroup}
+        canUngroup={groupAvailability.canUngroup}
+        onGroup={() => boardRef.current?.group()}
+        onUngroup={() => boardRef.current?.ungroup()}
       />
       <div className="relative flex min-h-0 flex-1">
         <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} />
@@ -39,6 +43,7 @@ export default function Home() {
           onToolSelect={setActiveTool}
           onHistoryChange={(canUndo, canRedo) => setHistoryStatus({ canUndo, canRedo })}
           onLayerChange={setLayerAvailability}
+          onGroupAvailabilityChange={(canGroup, canUngroup) => setGroupAvailability({ canGroup, canUngroup })}
         />
       </div>
     </main>
