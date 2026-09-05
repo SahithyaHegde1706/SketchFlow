@@ -82,6 +82,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const activePointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryState | null>(null);
   const activeToolRef = useRef(activeTool);
+  const keyboardMovementPendingRef = useRef(false);
   activeToolRef.current = activeTool;
 
   const addHistory = () => {
@@ -100,6 +101,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   }, []);
 
   const applySnapshot = (snapshot: CanvasSnapshot) => {
+    const selectedStrokeIndex = selectionRef.current?.kind === "stroke"
+      ? strokesRef.current.indexOf(selectionRef.current.value)
+      : -1;
     strokesRef.current = JSON.parse(JSON.stringify(snapshot.strokes));
     elementsRef.current = JSON.parse(JSON.stringify(snapshot.elements));
     creationOrderRef.current = JSON.parse(JSON.stringify(snapshot.creationOrder));
@@ -108,7 +112,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       let stillExists = false;
       const targetValue = selectionRef.current.value;
       if (selectionRef.current.kind === "stroke") {
-        stillExists = strokesRef.current.some(s => JSON.stringify(s) === JSON.stringify(targetValue));
+        const restoredStroke = selectedStrokeIndex >= 0 ? strokesRef.current[selectedStrokeIndex] : undefined;
+        stillExists = restoredStroke !== undefined;
+        if (restoredStroke) {
+          selectionRef.current = { kind: "stroke", value: restoredStroke };
+        }
       } else {
         const element = targetValue as WhiteboardElement;
         stillExists = elementsRef.current.some(e => e.id === element.id);
@@ -572,6 +580,36 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     );
   };
 
+  const moveSelectedByKeyboard = (deltaX: number, deltaY: number) => {
+    const selection = selectionRef.current;
+    if (!selection) {
+      return false;
+    }
+
+    moveSelection(selection, cloneSelectionValue(selection), deltaX, deltaY);
+    keyboardMovementPendingRef.current = true;
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      null,
+      null,
+      null,
+      selectionRef.current,
+      viewportRef.current,
+    );
+    return true;
+  };
+
+  const finishKeyboardMovement = () => {
+    if (!keyboardMovementPendingRef.current) {
+      return;
+    }
+
+    keyboardMovementPendingRef.current = false;
+    addHistory();
+  };
+
   const keyboardActionsRef = useRef({
     addHistory,
     cancelInteraction,
@@ -580,6 +618,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handlePaste,
     handleRedo,
     handleUndo,
+    finishKeyboardMovement,
+    moveSelectedByKeyboard,
     notifyClipboardChange,
     onToolSelect,
   });
@@ -591,6 +631,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handlePaste,
     handleRedo,
     handleUndo,
+    finishKeyboardMovement,
+    moveSelectedByKeyboard,
     notifyClipboardChange,
     onToolSelect,
   };
@@ -603,6 +645,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       }
 
       if (event.key === "Escape") {
+        actions.finishKeyboardMovement();
         event.preventDefault();
         if (textEditorRef.current) {
           cancelText();
@@ -626,6 +669,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
+        actions.finishKeyboardMovement();
         if (selectionRef.current) {
           event.preventDefault();
           if (selectionRef.current.kind === "stroke") {
@@ -651,22 +695,26 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       const isMac = navigator.userAgent.toLowerCase().includes("mac");
       const modifierKey = isMac ? event.metaKey : event.ctrlKey;
       if (modifierKey && event.key.toLowerCase() === "z") {
+        actions.finishKeyboardMovement();
         event.preventDefault();
         if (event.shiftKey) actions.handleRedo();
         else actions.handleUndo();
         return;
       }
       if (modifierKey && event.key.toLowerCase() === "c") {
+        actions.finishKeyboardMovement();
         event.preventDefault();
         actions.handleCopy();
         return;
       }
       if (modifierKey && event.key.toLowerCase() === "v") {
+        actions.finishKeyboardMovement();
         event.preventDefault();
         actions.handlePaste();
         return;
       }
       if (modifierKey && event.key.toLowerCase() === "d") {
+        actions.finishKeyboardMovement();
         event.preventDefault();
         actions.handleDuplicate();
         return;
@@ -675,17 +723,47 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         return;
       }
 
+      const movement = {
+        ArrowUp: { deltaX: 0, deltaY: event.shiftKey ? -10 : -1 },
+        ArrowDown: { deltaX: 0, deltaY: event.shiftKey ? 10 : 1 },
+        ArrowLeft: { deltaX: event.shiftKey ? -10 : -1, deltaY: 0 },
+        ArrowRight: { deltaX: event.shiftKey ? 10 : 1, deltaY: 0 },
+      }[event.key];
+      if (movement) {
+        if (actions.moveSelectedByKeyboard(movement.deltaX, movement.deltaY)) {
+          event.preventDefault();
+        }
+        return;
+      }
+
       const tool = getToolForShortcut(event.key);
       if (!tool) return;
       event.preventDefault();
+      actions.finishKeyboardMovement();
       if (activePointerIdRef.current !== null || dragRef.current || activeStrokeRef.current) {
         actions.cancelInteraction();
       }
       actions.onToolSelect(tool);
     };
 
+    const handleKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.key.startsWith("Arrow")) {
+        keyboardActionsRef.current.finishKeyboardMovement();
+      }
+    };
+
+    const handleWindowBlur = () => {
+      keyboardActionsRef.current.finishKeyboardMovement();
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("blur", handleWindowBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
   }, []);
 
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
