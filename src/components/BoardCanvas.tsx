@@ -28,6 +28,8 @@ import { cloneSelectionValue, createArrow, createCircle, createRectangle } from 
 import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
 import { moveSelection } from "@/editor/movement";
 import { resizeSelection } from "@/editor/resizing";
+import { applyLayerOperation, getLayerAvailability } from "@/editor/layering";
+import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 import { ZoomControls } from "@/components/ZoomControls";
 import {
   canRedo,
@@ -47,6 +49,7 @@ type BoardCanvasProps = {
   onToolSelect: (tool: Tool) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
+  onLayerChange?: (availability: LayerAvailability) => void;
 };
 
 export type BoardCanvasHandle = {
@@ -55,10 +58,11 @@ export type BoardCanvasHandle = {
   copy: () => void;
   paste: () => void;
   duplicate: () => void;
+  applyLayerOperation: (operation: LayerOperation) => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange }, ref) => {
+  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -106,7 +110,20 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       : -1;
     strokesRef.current = JSON.parse(JSON.stringify(snapshot.strokes));
     elementsRef.current = JSON.parse(JSON.stringify(snapshot.elements));
-    creationOrderRef.current = JSON.parse(JSON.stringify(snapshot.creationOrder));
+    const restoredCreationOrder = JSON.parse(JSON.stringify(snapshot.creationOrder)) as CreationRecord[];
+    let restoredStrokeIndex = 0;
+    creationOrderRef.current = restoredCreationOrder
+      .map(record => {
+        if (record.kind === "stroke") {
+          const stroke = strokesRef.current[restoredStrokeIndex];
+          restoredStrokeIndex += 1;
+          return stroke ? { kind: "stroke" as const, value: stroke } : null;
+        }
+
+        const element = elementsRef.current.find(item => item.id === record.value.id);
+        return element ? { kind: "element" as const, value: element } : null;
+      })
+      .filter((record): record is CreationRecord => record !== null);
 
     if (selectionRef.current) {
       let stillExists = false;
@@ -140,6 +157,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
     );
+    notifyLayerChange();
   };
 
   const handleUndo = () => {
@@ -170,6 +188,29 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     );
   };
 
+  const notifyLayerChange = () => {
+    onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
+  };
+
+  const handleLayerOperation = (operation: LayerOperation) => {
+    if (!applyLayerOperation(creationOrderRef.current, selectionRef.current, operation)) {
+      return;
+    }
+
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      null,
+      null,
+      null,
+      selectionRef.current,
+      viewportRef.current,
+    );
+    addHistory();
+    notifyLayerChange();
+  };
+
   const handleCopy = () => {
     clipboardRef.current = copyToClipboard(selectionRef.current);
     notifyClipboardChange();
@@ -194,6 +235,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     );
     addHistory();
     notifyClipboardChange();
+    notifyLayerChange();
   };
 
   const handleDuplicate = () => {
@@ -215,6 +257,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     );
     addHistory();
     notifyClipboardChange();
+    notifyLayerChange();
   };
 
   useImperativeHandle(ref, () => ({
@@ -223,6 +266,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     copy: handleCopy,
     paste: handlePaste,
     duplicate: handleDuplicate,
+    applyLayerOperation: handleLayerOperation,
   }));
 
   useEffect(() => {
@@ -376,6 +420,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       } else {
         const nextSelection = context ? findSelectionAtPoint(context, point, creationOrderRef.current, true) : null;
         selectionRef.current = nextSelection;
+        notifyLayerChange();
 
         if (nextSelection) {
           dragRef.current = {
@@ -405,6 +450,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     selectionRef.current = null;
+    notifyLayerChange();
 
     if (activeTool === "eraser") {
       eraseAtPoint(point);
@@ -620,7 +666,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handleUndo,
     finishKeyboardMovement,
     moveSelectedByKeyboard,
+    handleLayerOperation,
     notifyClipboardChange,
+    notifyLayerChange,
     onToolSelect,
   });
   keyboardActionsRef.current = {
@@ -633,7 +681,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handleUndo,
     finishKeyboardMovement,
     moveSelectedByKeyboard,
+    handleLayerOperation,
     notifyClipboardChange,
+    notifyLayerChange,
     onToolSelect,
   };
 
@@ -664,6 +714,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             viewportRef.current,
           );
           actions.notifyClipboardChange();
+          actions.notifyLayerChange();
         }
         return;
       }
@@ -688,12 +739,26 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           );
           actions.addHistory();
           actions.notifyClipboardChange();
+          actions.notifyLayerChange();
         }
         return;
       }
 
       const isMac = navigator.userAgent.toLowerCase().includes("mac");
       const modifierKey = isMac ? event.metaKey : event.ctrlKey;
+      const layerModifierKey = event.ctrlKey || event.metaKey;
+      const layerShortcut = layerModifierKey && (
+        event.code === "BracketRight" || event.code === "BracketLeft"
+      );
+      if (layerShortcut) {
+        event.preventDefault();
+        actions.finishKeyboardMovement();
+        const operation: LayerOperation = event.code === "BracketRight"
+          ? event.shiftKey ? "bring-to-front" : "bring-forward"
+          : event.shiftKey ? "send-to-back" : "send-backward";
+        actions.handleLayerOperation(operation);
+        return;
+      }
       if (modifierKey && event.key.toLowerCase() === "z") {
         actions.finishKeyboardMovement();
         event.preventDefault();

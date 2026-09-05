@@ -1,8 +1,13 @@
+import type { LayerAvailability, LayerOperation } from "@/editor/layering";
+import { LayerControls } from "@/components/LayerControls";
+
 type BoardHeaderProps = {
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
+  layerAvailability: LayerAvailability;
+  onLayerOperation: (operation: LayerOperation) => void;
 };
 
 const MoreIcon = () => <span aria-hidden="true">...</span>;
@@ -12,6 +17,8 @@ export function BoardHeader({
   canRedo = false,
   onUndo,
   onRedo,
+  layerAvailability,
+  onLayerOperation,
 }: BoardHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7">
@@ -34,6 +41,8 @@ export function BoardHeader({
         </span>
 
         <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block" />
+
+        <LayerControls {...layerAvailability} onLayerOperation={onLayerOperation} />
 
         <button
           type="button"
