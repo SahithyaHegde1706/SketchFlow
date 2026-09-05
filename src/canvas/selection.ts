@@ -58,7 +58,7 @@ export function drawSelection(context: CanvasRenderingContext2D, selection: Sele
 
   context.save();
   context.strokeStyle = "#0d9488";
-  context.lineWidth = 1.5;
+  context.lineWidth = 2;
   context.setLineDash([5, 4]);
 
   const left = bounds.left - padding;
@@ -71,7 +71,7 @@ export function drawSelection(context: CanvasRenderingContext2D, selection: Sele
   context.stroke();
 
   context.setLineDash([]);
-  context.fillStyle = "#ffffff";
+  context.fillStyle = "#e5e7eb";
   const handleSize = 10;
   const right = left + width;
   const bottom = top + height;

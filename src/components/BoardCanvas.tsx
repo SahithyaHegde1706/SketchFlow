@@ -38,6 +38,8 @@ import {
   undo,
 } from "@/history/history";
 import type { HistoryState, CanvasSnapshot } from "@/history/types";
+import { copyToClipboard, offsetSelection } from "@/clipboard/clipboard";
+import type { ClipboardState } from "@/clipboard/types";
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -189,56 +191,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     };
   }, []);
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Delete" && event.key !== "Backspace") {
-        return;
-      }
 
-      if (
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement ||
-        (event.target instanceof HTMLElement && event.target.isContentEditable)
-      ) {
-        return;
-      }
-
-      const selection = selectionRef.current;
-      if (!selection) {
-        return;
-      }
-
-      event.preventDefault();
-
-      if (selection.kind === "stroke") {
-        removeByReference(strokesRef.current, selection.value);
-      } else {
-        removeByReference(elementsRef.current, selection.value);
-      }
-
-      removeByReference(creationOrderRef.current, selection);
-
-      selectionRef.current = null;
-      dragRef.current = null;
-      activePointerIdRef.current = null;
-
-      renderCanvas(
-        canvasRef.current,
-        strokesRef.current,
-        elementsRef.current,
-        activeRectangleRef.current,
-        activeCircleRef.current,
-        activeArrowRef.current,
-        null,
-        viewportRef.current,
-      );
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
 
   const getPoint = (
     event: PointerEvent<HTMLCanvasElement> | MouseEvent<HTMLCanvasElement>,
