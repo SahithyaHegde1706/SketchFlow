@@ -74,7 +74,7 @@ export function renderCanvas(
   }
 
   if (selection) {
-    drawSelection(context, selection);
+    drawSelection(context, selection, elements);
   }
 
   context.restore();

@@ -12,6 +12,7 @@ import type {
   PanState,
   Point,
   RectangleElement,
+
   ResizeHandle,
   Selection,
   SelectionSet,
@@ -44,7 +45,7 @@ import {
   undo,
 } from "@/history/history";
 import type { HistoryState, CanvasSnapshot } from "@/history/types";
-import { copyToClipboard, offsetSelections } from "@/clipboard/clipboard";
+import { copyToClipboard, offsetClipboard } from "@/clipboard/clipboard";
 import type { ClipboardState } from "@/clipboard/types";
 
 type BoardCanvasProps = {
@@ -69,6 +70,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
+
   const creationOrderRef = useRef<CreationRecord[]>([]);
   const selectionRef = useRef<SelectionSet>([]);
   const dragRef = useRef<DragState | null>(null);
@@ -108,9 +110,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       (selection.kind === "element" && candidate.kind === "element" && selection.value.id === candidate.value.id)
     ));
 
+  const flattenSelection = (selections: SelectionSet): SelectionSet => {
+    return selections;
+  };
+
   useEffect(() => {
     historyRef.current = createHistory(
-      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current)
+      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, [])
     );
   }, []);
 
@@ -139,6 +145,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (stroke) restoredSelection.push({ kind: "stroke", value: stroke });
         continue;
       }
+
 
       const element = elementsRef.current.find(item => item.id === selection.id);
       if (element) restoredSelection.push({ kind: "element", value: element });
@@ -202,6 +209,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
   };
 
+
+
+
+
   const handleLayerOperation = (operation: LayerOperation) => {
     if (!applyLayerOperation(creationOrderRef.current, selectionRef.current, operation)) {
       return;
@@ -222,20 +233,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   };
 
   const handleCopy = () => {
-    clipboardRef.current = copyToClipboard(selectionRef.current);
+    clipboardRef.current = copyToClipboard(selectionRef.current, elementsRef.current);
     notifyClipboardChange();
   };
 
   const handlePaste = () => {
     if (!clipboardRef.current.item) return;
-    const newSelection = offsetSelections(clipboardRef.current.item, 20);
+    const { selections, elements } = offsetClipboard(clipboardRef.current.item, 20);
 
-    for (const item of newSelection) {
-      if (item.kind === "stroke") strokesRef.current.push(item.value);
-      else elementsRef.current.push(item.value);
-      creationOrderRef.current.push(item);
+    for (const item of elements) {
+      elementsRef.current.push(item);
+      creationOrderRef.current.push({ kind: "element", value: item });
     }
-    selectionRef.current = newSelection;
+    for (const sel of selections) {
+      if (sel.kind === "stroke") {
+        strokesRef.current.push(sel.value);
+        creationOrderRef.current.push({ kind: "stroke", value: sel.value });
+      }
+    }
+    selectionRef.current = selections;
     
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
@@ -249,14 +265,24 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const handleDuplicate = () => {
     if (selectionRef.current.length === 0) return;
-    const newSelection = offsetSelections(selectionRef.current, 20);
+    
+    // Create temporary clipboard state for duplication
+    const tempClipboard = copyToClipboard(selectionRef.current, elementsRef.current);
+    if (!tempClipboard.item) return;
+    
+    const { selections, elements } = offsetClipboard(tempClipboard.item, 20);
 
-    for (const item of newSelection) {
-      if (item.kind === "stroke") strokesRef.current.push(item.value);
-      else elementsRef.current.push(item.value);
-      creationOrderRef.current.push(item);
+    for (const item of elements) {
+      elementsRef.current.push(item);
+      creationOrderRef.current.push({ kind: "element", value: item });
     }
-    selectionRef.current = newSelection;
+    for (const sel of selections) {
+      if (sel.kind === "stroke") {
+        strokesRef.current.push(sel.value);
+        creationOrderRef.current.push({ kind: "stroke", value: sel.value });
+      }
+    }
+    selectionRef.current = selections;
     
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
@@ -275,6 +301,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     paste: handlePaste,
     duplicate: handleDuplicate,
     applyLayerOperation: handleLayerOperation,
+
   }));
 
   useEffect(() => {
@@ -445,31 +472,35 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         notifyLayerChange();
       } else {
         const wasSelected = selectionIncludes(currentSelection, clickedSelection);
-        if (wasSelected && currentSelection.length > 1) {
+        const activeSelection = wasSelected ? currentSelection : [clickedSelection];
+        const isGroupOrMulti = activeSelection.length > 1;
+
+        if (isGroupOrMulti) {
+          const flatSelections = flattenSelection(activeSelection);
           multiDragRef.current = {
-            selections: [...currentSelection],
-            originals: currentSelection.map(selection => cloneSelectionValue(selection)),
+            selections: flatSelections,
+            originals: flatSelections.map(selection => cloneSelectionValue(selection)),
             pointerStart: point,
             clicked: clickedSelection,
             moved: false,
           };
+          if (!wasSelected) {
+            selectionRef.current = [clickedSelection];
+            notifyLayerChange();
+          }
           activePointerIdRef.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
         } else {
           selectionRef.current = [clickedSelection];
           notifyLayerChange();
-          dragRef.current = null;
-          multiDragRef.current = null;
-          if (wasSelected || currentSelection.length === 0) {
-            dragRef.current = {
-              selection: clickedSelection,
-              pointerStart: point,
-              original: cloneSelectionValue(clickedSelection),
-              type: "move",
-            };
-            activePointerIdRef.current = event.pointerId;
-            event.currentTarget.setPointerCapture(event.pointerId);
-          }
+          dragRef.current = {
+            selection: clickedSelection,
+            pointerStart: point,
+            original: cloneSelectionValue(clickedSelection),
+            type: "move",
+          };
+          activePointerIdRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
         }
       }
 
@@ -679,7 +710,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       return false;
     }
 
-    selection.forEach(item => {
+    const flatSelections = flattenSelection(selection);
+    flatSelections.forEach(item => {
       moveSelection(item, cloneSelectionValue(item), deltaX, deltaY);
     });
     keyboardMovementPendingRef.current = true;

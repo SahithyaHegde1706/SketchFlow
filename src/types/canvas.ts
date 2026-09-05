@@ -54,6 +54,7 @@ export type WhiteboardElement =
   | ArrowElement
   | TextElement;
 
+
 export type Selection =
   | { kind: "stroke"; value: FreehandStroke }
   | { kind: "element"; value: WhiteboardElement };

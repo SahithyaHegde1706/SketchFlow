@@ -11,6 +11,7 @@ export function createSelectionSnapshot(
     if (item.kind === "stroke") {
       return { kind: "stroke", index: strokes.indexOf(item.value) };
     }
+
     return { kind: "element", id: item.value.id };
   });
 }
@@ -20,6 +21,7 @@ export function createSnapshot(
   elements: WhiteboardElement[],
   creationOrder: CreationRecord[],
   selection: SelectionSet = [],
+
 ): CanvasSnapshot {
   return {
     strokes: JSON.parse(JSON.stringify(strokes)),

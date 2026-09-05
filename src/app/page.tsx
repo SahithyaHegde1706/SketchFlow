@@ -18,6 +18,7 @@ export default function Home() {
     canBringToFront: false,
     canSendToBack: false,
   });
+
   const boardRef = useRef<BoardCanvasHandle>(null);
 
   return (

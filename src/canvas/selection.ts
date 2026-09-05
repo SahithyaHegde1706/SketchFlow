@@ -1,16 +1,7 @@
-import type { Bounds, Point, ResizeHandle, Selection, SelectionSet } from "@/types/canvas";
+import type { Bounds, Point, ResizeHandle, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
 import { getBounds, getStrokeBounds } from "./geometry";
 
-export function getSelectionBounds(
-  context: CanvasRenderingContext2D,
-  selection: Selection,
-): Bounds {
-  if (selection.kind === "stroke") {
-    return getStrokeBounds(selection.value);
-  }
-
-  const element = selection.value;
-
+function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
   switch (element.type) {
     case "rectangle":
     case "circle":
@@ -24,19 +15,17 @@ export function getSelectionBounds(
       const angle = Math.atan2(element.endY - element.startY, element.endX - element.startX);
       const arrowheadLength = 12;
       const arrowheadAngle = Math.PI / 7;
-      const leftHead = {
-        x: element.endX - arrowheadLength * Math.cos(angle - arrowheadAngle),
-        y: element.endY - arrowheadLength * Math.sin(angle - arrowheadAngle),
-      };
-      const rightHead = {
-        x: element.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
-        y: element.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
-      };
       return getBounds([
         { x: element.startX, y: element.startY },
         { x: element.endX, y: element.endY },
-        leftHead,
-        rightHead,
+        {
+          x: element.endX - arrowheadLength * Math.cos(angle - arrowheadAngle),
+          y: element.endY - arrowheadLength * Math.sin(angle - arrowheadAngle),
+        },
+        {
+          x: element.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
+          y: element.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
+        },
       ]);
     }
     case "text": {
@@ -52,13 +41,26 @@ export function getSelectionBounds(
   }
 }
 
+export function getSelectionBounds(
+  context: CanvasRenderingContext2D,
+  selection: Selection,
+  elements: WhiteboardElement[] = [],
+): Bounds {
+  if (selection.kind === "stroke") {
+    return getStrokeBounds(selection.value);
+  }
+
+  return getElementBounds(context, selection.value);
+}
+
 export function getCombinedSelectionBounds(
   context: CanvasRenderingContext2D,
   selections: SelectionSet,
+  elements: WhiteboardElement[] = [],
 ): Bounds {
   return selections.reduce(
     (bounds, selection) => {
-      const selectionBounds = getSelectionBounds(context, selection);
+      const selectionBounds = getSelectionBounds(context, selection, elements);
       return {
         left: Math.min(bounds.left, selectionBounds.left),
         top: Math.min(bounds.top, selectionBounds.top),
@@ -119,29 +121,34 @@ function drawSelectionBounds(
   context.restore();
 }
 
-export function drawSelection(context: CanvasRenderingContext2D, selection: Selection | SelectionSet) {
+export function drawSelection(
+  context: CanvasRenderingContext2D,
+  selection: Selection | SelectionSet,
+  elements: WhiteboardElement[] = [],
+) {
   const selections = Array.isArray(selection) ? selection : [selection];
   if (selections.length === 0) {
     return;
   }
 
   if (selections.length === 1) {
-    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!), true);
+    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!, elements), true);
     return;
   }
 
   for (const item of selections) {
-    drawSelectionBounds(context, getSelectionBounds(context, item), false);
+    drawSelectionBounds(context, getSelectionBounds(context, item, elements), false);
   }
-  drawSelectionBounds(context, getCombinedSelectionBounds(context, selections), false);
+  drawSelectionBounds(context, getCombinedSelectionBounds(context, selections, elements), false);
 }
 
 export function findResizeHandleAtPoint(
   context: CanvasRenderingContext2D,
   point: Point,
   selection: Selection,
+  elements: WhiteboardElement[] = [],
 ): ResizeHandle | null {
-  const bounds = getSelectionBounds(context, selection);
+  const bounds = getSelectionBounds(context, selection, elements);
   const padding = 6;
   const handleHitSize = 16;
   const left = bounds.left - padding;
