@@ -94,3 +94,15 @@ export type Bounds = {
   right: number;
   bottom: number;
 };
+
+export type Viewport = {
+  offsetX: number;
+  offsetY: number;
+};
+
+export type PanState = {
+  pointerStartX: number;
+  pointerStartY: number;
+  originOffsetX: number;
+  originOffsetY: number;
+};

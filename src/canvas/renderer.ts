@@ -5,6 +5,7 @@ import type {
   RectangleElement,
   Selection,
   TextElement,
+  Viewport,
   WhiteboardElement,
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
@@ -21,6 +22,7 @@ export function renderCanvas(
   circlePreview: CircleElement | null,
   arrowPreview: ArrowElement | null,
   selection: Selection | null,
+  viewport: Viewport,
 ) {
   if (!canvas) {
     return;
@@ -38,6 +40,9 @@ export function renderCanvas(
   context.clearRect(0, 0, bounds.width, bounds.height);
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, bounds.width, bounds.height);
+
+  context.save();
+  context.translate(viewport.offsetX, viewport.offsetY);
 
   for (const stroke of strokes) {
     drawStroke(context, stroke);
@@ -70,6 +75,8 @@ export function renderCanvas(
   if (selection) {
     drawSelection(context, selection);
   }
+
+  context.restore();
 }
 
 export function drawStroke(context: CanvasRenderingContext2D, stroke: FreehandStroke) {

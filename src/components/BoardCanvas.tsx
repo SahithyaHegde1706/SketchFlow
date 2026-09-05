@@ -8,6 +8,7 @@ import type {
   CreationRecord,
   DragState,
   FreehandStroke,
+  PanState,
   Point,
   RectangleElement,
   ResizeHandle,
@@ -15,11 +16,13 @@ import type {
   TextElement,
   TextEditorState,
   Tool,
+  Viewport,
   WhiteboardElement,
 } from "@/types/canvas";
 import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
 import { findResizeHandleAtPoint } from "@/canvas/selection";
+import { screenToLogical } from "@/canvas/geometry";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
 import { moveSelection } from "@/editor/movement";
@@ -36,6 +39,8 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   const creationOrderRef = useRef<CreationRecord[]>([]);
   const selectionRef = useRef<Selection | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0 });
+  const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
@@ -74,6 +79,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         activeCircleRef.current,
         activeArrowRef.current,
         selectionRef.current,
+        viewportRef.current,
       );
     };
 
@@ -129,6 +135,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         activeCircleRef.current,
         activeArrowRef.current,
         null,
+        viewportRef.current,
       );
     };
 
@@ -164,7 +171,22 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       return;
     }
 
-    const point = getPoint(event);
+    const screenPoint = getPoint(event);
+
+    if (activeTool === "hand") {
+      panRef.current = {
+        pointerStartX: screenPoint.x,
+        pointerStartY: screenPoint.y,
+        originOffsetX: viewportRef.current.offsetX,
+        originOffsetY: viewportRef.current.offsetY,
+      };
+      activePointerIdRef.current = event.pointerId;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.style.cursor = "grabbing";
+      return;
+    }
+
+    const point = screenToLogical(screenPoint, viewportRef.current);
 
     if (activeTool === "select") {
       const currentSelection = selectionRef.current;
@@ -211,6 +233,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         null,
         null,
         selectionRef.current,
+        viewportRef.current,
       );
       return;
     }
@@ -249,6 +272,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       activeCircleRef.current,
       activeArrowRef.current,
       selectionRef.current,
+      viewportRef.current,
     );
   };
 
@@ -257,8 +281,8 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       return;
     }
 
-    const point = getPoint(event);
-    const editor = { x: point.x, y: point.y, value: "" };
+    const screenPoint = getPoint(event);
+    const editor = { x: screenPoint.x, y: screenPoint.y, value: "" };
     textEditorRef.current = editor;
     setTextEditor(editor);
   };
@@ -294,11 +318,13 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       return;
     }
 
+    const logicalPoint = screenToLogical({ x: editor.x, y: editor.y }, viewportRef.current);
+
     const textElement: TextElement = {
       id: crypto.randomUUID(),
       type: "text",
-      x: editor.x,
-      y: editor.y,
+      x: logicalPoint.x,
+      y: logicalPoint.y,
       text: editor.value,
       fontSize: TEXT_FONT_SIZE,
       strokeColor: STROKE_COLOR,
@@ -313,6 +339,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       null,
       null,
       selectionRef.current,
+      viewportRef.current,
     );
   };
 
@@ -327,9 +354,35 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
-    const point = getPoint(event);
+    const screenPoint = getPoint(event);
+
+    if (activePointerIdRef.current === event.pointerId && activeTool === "hand" && panRef.current) {
+      const pan = panRef.current;
+      viewportRef.current = {
+        offsetX: pan.originOffsetX + (screenPoint.x - pan.pointerStartX),
+        offsetY: pan.originOffsetY + (screenPoint.y - pan.pointerStartY),
+      };
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        activeRectangleRef.current,
+        activeCircleRef.current,
+        activeArrowRef.current,
+        selectionRef.current,
+        viewportRef.current,
+      );
+      return;
+    }
+
+    const point = screenToLogical(screenPoint, viewportRef.current);
 
     if (activePointerIdRef.current !== event.pointerId) {
+      if (activeTool === "hand") {
+        event.currentTarget.style.cursor = "grab";
+        return;
+      }
+
       if (activeTool === "select") {
         const currentSelection = selectionRef.current;
         const context = canvasRef.current?.getContext("2d");
@@ -377,6 +430,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
           null,
           null,
           selectionRef.current,
+          viewportRef.current,
         );
       }
       return;
@@ -419,6 +473,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       activeCircleRef.current,
       activeArrowRef.current,
       selectionRef.current,
+      viewportRef.current,
     );
   };
 
@@ -426,6 +481,15 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
     if (activePointerIdRef.current !== event.pointerId) {
       return;
     }
+
+    if (activeTool === "hand") {
+      panRef.current = null;
+      activePointerIdRef.current = null;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      event.currentTarget.style.cursor = "grab";
+      return;
+    }
+
 
     if (activeTool === "rectangle") {
       const rectangle = activeRectangleRef.current;
@@ -472,6 +536,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         null,
         null,
         selectionRef.current,
+        viewportRef.current,
       );
       return;
     }
@@ -489,6 +554,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
       null,
       null,
       selectionRef.current,
+      viewportRef.current,
     );
   };
 
@@ -536,6 +602,7 @@ export function BoardCanvas({ activeTool }: BoardCanvasProps) {
         null,
         null,
         selectionRef.current,
+        viewportRef.current,
       );
       return;
     }
