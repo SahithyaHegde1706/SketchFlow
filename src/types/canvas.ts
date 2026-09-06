@@ -50,6 +50,12 @@ export type TextElement = {
   fontSize: number;
   strokeColor: string;
   rotation?: number;
+  fontFamily?: string;
+  fontWeight?: "normal" | "bold";
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline";
+  textAlign?: "left" | "center" | "right";
+  lineHeight?: number;
 };
 
 export type WhiteboardElement =

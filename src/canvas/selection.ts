@@ -1,6 +1,7 @@
 import type { Bounds, Point, ResizeHandle, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
 import { getBounds, getStrokeBounds, rotatePoint } from "./geometry";
 import { getElementCenter } from "@/editor/rotation";
+import { getTextBounds } from "./text";
 
 function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
   let unrotatedBounds: Bounds;
@@ -34,14 +35,7 @@ function getElementBounds(context: CanvasRenderingContext2D, element: Whiteboard
       break;
     }
     case "text": {
-      context.font = `${element.fontSize}px Arial, sans-serif`;
-      const width = context.measureText(element.text).width;
-      unrotatedBounds = {
-        left: element.x,
-        top: element.y - element.fontSize,
-        right: element.x + width,
-        bottom: element.y,
-      };
+      unrotatedBounds = getTextBounds(context, element);
       break;
     }
   }

@@ -4,11 +4,11 @@ import type {
   FreehandStroke,
   RectangleElement,
   SelectionSet,
-  TextElement,
   Viewport,
   WhiteboardElement,
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
+import { drawTextElement } from "./text";
 
 export const STROKE_COLOR = "#0f172a";
 export const STROKE_WIDTH = 3;
@@ -57,7 +57,7 @@ export function renderCanvas(
     } else if (element.type === "arrow") {
       drawArrow(context, element);
     } else {
-      drawText(context, element);
+      drawTextElement(context, element);
     }
   }
 
@@ -178,21 +178,5 @@ export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement
     arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
   );
   context.stroke();
-  context.restore();
-}
-
-export function drawText(context: CanvasRenderingContext2D, text: TextElement) {
-  context.save();
-  if (text.rotation) {
-    const cx = text.x; // approx
-    const cy = text.y - text.fontSize / 2;
-    context.translate(cx, cy);
-    context.rotate(text.rotation);
-    context.translate(-cx, -cy);
-  }
-  context.fillStyle = text.strokeColor;
-  context.font = `${text.fontSize}px Arial, sans-serif`;
-  context.textBaseline = "alphabetic";
-  context.fillText(text.text, text.x, text.y);
   context.restore();
 }

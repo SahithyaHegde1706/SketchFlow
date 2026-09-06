@@ -71,6 +71,30 @@ export function PropertiesPanel({ selections, elements, onUpdateProperties }: Pr
     ? (new Set(textElements.map(e => e.fontSize)).size === 1 ? textElements[0].fontSize : "mixed")
     : undefined;
 
+  const fontFamily = hasText
+    ? (new Set(textElements.map(e => e.fontFamily || "Arial")).size === 1 ? (textElements[0].fontFamily || "Arial") : "mixed")
+    : undefined;
+
+  const fontWeight = hasText
+    ? (new Set(textElements.map(e => e.fontWeight || "normal")).size === 1 ? (textElements[0].fontWeight || "normal") : "mixed")
+    : undefined;
+
+  const fontStyle = hasText
+    ? (new Set(textElements.map(e => e.fontStyle || "normal")).size === 1 ? (textElements[0].fontStyle || "normal") : "mixed")
+    : undefined;
+
+  const textDecoration = hasText
+    ? (new Set(textElements.map(e => e.textDecoration || "none")).size === 1 ? (textElements[0].textDecoration || "none") : "mixed")
+    : undefined;
+
+  const textAlign = hasText
+    ? (new Set(textElements.map(e => e.textAlign || "left")).size === 1 ? (textElements[0].textAlign || "left") : "mixed")
+    : undefined;
+
+  const lineHeight = hasText
+    ? (new Set(textElements.map(e => e.lineHeight || 1.2)).size === 1 ? (textElements[0].lineHeight || 1.2) : "mixed")
+    : undefined;
+
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
       <div className="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">
@@ -156,9 +180,100 @@ export function PropertiesPanel({ selections, elements, onUpdateProperties }: Pr
                   const val = parseInt(e.target.value);
                   if (!isNaN(val) && val >= 8) onUpdateProperties({ fontSize: val });
                 }}
-                className="w-20 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
               />
               <span className="text-xs text-slate-500">px</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Font</label>
+            <div className="flex items-center gap-2">
+              <select
+                value={fontFamily !== "mixed" ? fontFamily : ""}
+                onChange={(e) => onUpdateProperties({ fontFamily: e.target.value })}
+                className="w-32 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+              >
+                {fontFamily === "mixed" && <option value="" disabled>Mixed</option>}
+                <option value="Arial">Arial</option>
+                <option value="Helvetica">Helvetica</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Verdana">Verdana</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Style</label>
+            <div className="flex items-center gap-1 border border-slate-200 rounded p-1">
+              <button
+                title="Bold"
+                onClick={() => onUpdateProperties({ fontWeight: fontWeight === "bold" ? "normal" : "bold" })}
+                className={`w-7 h-7 flex items-center justify-center rounded font-bold ${fontWeight === "bold" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+              >
+                B
+              </button>
+              <button
+                title="Italic"
+                onClick={() => onUpdateProperties({ fontStyle: fontStyle === "italic" ? "normal" : "italic" })}
+                className={`w-7 h-7 flex items-center justify-center rounded italic ${fontStyle === "italic" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+              >
+                I
+              </button>
+              <button
+                title="Underline"
+                onClick={() => onUpdateProperties({ textDecoration: textDecoration === "underline" ? "none" : "underline" })}
+                className={`w-7 h-7 flex items-center justify-center rounded underline ${textDecoration === "underline" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+              >
+                U
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Align</label>
+            <div className="flex items-center gap-1 border border-slate-200 rounded p-1">
+              <button
+                title="Left Align"
+                onClick={() => onUpdateProperties({ textAlign: "left" })}
+                className={`w-7 h-7 flex items-center justify-center rounded ${textAlign === "left" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="19" y2="18"></line></svg>
+              </button>
+              <button
+                title="Center Align"
+                onClick={() => onUpdateProperties({ textAlign: "center" })}
+                className={`w-7 h-7 flex items-center justify-center rounded ${textAlign === "center" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="5" y1="18" x2="19" y2="18"></line></svg>
+              </button>
+              <button
+                title="Right Align"
+                onClick={() => onUpdateProperties({ textAlign: "right" })}
+                className={`w-7 h-7 flex items-center justify-center rounded ${textAlign === "right" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="9" y1="12" x2="21" y2="12"></line><line x1="5" y1="18" x2="21" y2="18"></line></svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Line Height</label>
+            <div className="flex items-center gap-2">
+              <select
+                value={lineHeight !== "mixed" ? lineHeight : ""}
+                onChange={(e) => onUpdateProperties({ lineHeight: Number(e.target.value) })}
+                className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+              >
+                {lineHeight === "mixed" && <option value="" disabled>Mixed</option>}
+                <option value="1">1.0</option>
+                <option value="1.2">1.2</option>
+                <option value="1.5">1.5</option>
+                <option value="1.8">1.8</option>
+                <option value="2">2.0</option>
+              </select>
             </div>
           </div>
         </div>
