@@ -15,6 +15,7 @@ export type RectangleElement = {
   strokeColor: string;
   strokeWidth: number;
   rotation?: number;
+  fillColor?: string | null;
 };
 
 export type CircleElement = {
@@ -27,6 +28,7 @@ export type CircleElement = {
   strokeColor: string;
   strokeWidth: number;
   rotation?: number;
+  fillColor?: string | null;
 };
 
 export type ArrowElement = {

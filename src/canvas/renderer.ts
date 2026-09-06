@@ -117,6 +117,12 @@ export function drawRectangle(
   context.lineWidth = rectangle.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
+  
+  if (rectangle.fillColor && rectangle.fillColor !== "transparent" && rectangle.fillColor !== "none") {
+    context.fillStyle = rectangle.fillColor;
+    context.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
+  }
+  
   context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
   context.restore();
 }
@@ -144,6 +150,12 @@ export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElem
     0,
     Math.PI * 2,
   );
+  
+  if (circle.fillColor && circle.fillColor !== "transparent" && circle.fillColor !== "none") {
+    context.fillStyle = circle.fillColor;
+    context.fill();
+  }
+  
   context.stroke();
   context.restore();
 }

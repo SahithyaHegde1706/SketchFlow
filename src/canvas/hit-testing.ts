@@ -97,6 +97,13 @@ export function isPointNearRectangle(point: Point, rectangle: RectangleElement) 
   const right = rectangle.x + rectangle.width;
   const top = rectangle.y;
   const bottom = rectangle.y + rectangle.height;
+  
+  if (rectangle.fillColor && rectangle.fillColor !== "transparent" && rectangle.fillColor !== "none") {
+    if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) {
+      return true;
+    }
+  }
+
   const edges = [
     [
       { x: left, y: top },
@@ -131,6 +138,12 @@ export function isPointNearEllipse(point: Point, circle: CircleElement) {
     (point.x - (circle.x + radiusX)) / radiusX,
     (point.y - (circle.y + radiusY)) / radiusY,
   );
+
+  if (circle.fillColor && circle.fillColor !== "transparent" && circle.fillColor !== "none") {
+    if (normalizedDistance <= 1) {
+      return true;
+    }
+  }
 
   return Math.abs(normalizedDistance - 1) * Math.min(radiusX, radiusY) <= ERASER_TOLERANCE;
 }

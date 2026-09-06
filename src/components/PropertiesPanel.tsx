@@ -57,6 +57,14 @@ export function PropertiesPanel({ selections, elements, onUpdateProperties }: Pr
       ? (selectedElements[0] as Extract<WhiteboardElement, { strokeWidth: number }>).strokeWidth : "mixed")
     : undefined;
 
+  const fillableElements = selectedElements.filter(e => e.type === "rectangle" || e.type === "circle");
+  const hasFillable = fillableElements.length > 0;
+  
+  const fillColor = hasFillable 
+    ? (new Set(fillableElements.map(e => (e as Extract<WhiteboardElement, { fillColor?: string | null }>).fillColor || "transparent")).size === 1 
+        ? ((fillableElements[0] as Extract<WhiteboardElement, { fillColor?: string | null }>).fillColor || "transparent") : "mixed")
+    : undefined;
+
   const rotationSet = new Set(selectedElements.map(e => Math.round((e.rotation || 0) * (180 / Math.PI))));
   const rotationDegrees = rotationSet.size === 1 ? Array.from(rotationSet)[0] : "mixed";
 
@@ -143,6 +151,36 @@ export function PropertiesPanel({ selections, elements, onUpdateProperties }: Pr
                   <option value="6">6</option>
                   <option value="8">8</option>
                 </select>
+              </div>
+            </div>
+          )}
+
+          {hasFillable && (
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-slate-600">Fill</label>
+              <div className="flex items-center gap-2">
+                {fillColor === "mixed" ? (
+                  <span className="text-xs text-slate-400 italic">Mixed</span>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="color" 
+                    value={fillColor !== "mixed" && fillColor !== "transparent" && fillColor !== "none" && fillColor ? fillColor : "#ffffff"}
+                    onChange={(e) => onUpdateProperties({ fillColor: e.target.value })}
+                    disabled={fillColor === "transparent" || fillColor === "none"}
+                    className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Fill Color"
+                  />
+                  <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={fillColor === "transparent" || fillColor === "none"}
+                      onChange={(e) => onUpdateProperties({ fillColor: e.target.checked ? "transparent" : "#ffffff" })}
+                      className="cursor-pointer"
+                    />
+                    None
+                  </label>
+                </div>
               </div>
             </div>
           )}

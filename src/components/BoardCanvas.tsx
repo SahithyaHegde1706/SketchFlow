@@ -437,16 +437,34 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const handleUpdateProperties = (updates: Partial<WhiteboardElement>) => {
     if (selectionRef.current.length === 0) return;
     
+    const applySafeUpdates = (element: WhiteboardElement, updates: Partial<WhiteboardElement>) => {
+      const safeUpdates = { ...updates } as Record<string, unknown>;
+      if (element.type !== "rectangle" && element.type !== "circle") {
+        delete safeUpdates.fillColor;
+      }
+      if (element.type !== "text") {
+        delete safeUpdates.fontFamily;
+        delete safeUpdates.fontWeight;
+        delete safeUpdates.fontStyle;
+        delete safeUpdates.textDecoration;
+        delete safeUpdates.textAlign;
+        delete safeUpdates.lineHeight;
+        delete safeUpdates.text;
+        delete safeUpdates.fontSize;
+      }
+      Object.assign(element, safeUpdates);
+    };
+
     let changed = false;
     for (const selection of selectionRef.current) {
       if (selection.kind === "element") {
-        Object.assign(selection.value, updates);
+        applySafeUpdates(selection.value, updates);
         changed = true;
       } else if (selection.kind === "group") {
         for (const id of selection.value.elementIds) {
           const element = elementsRef.current.find(e => e.id === id);
           if (element) {
-            Object.assign(element, updates);
+            applySafeUpdates(element, updates);
             changed = true;
           }
         }
