@@ -7,6 +7,8 @@ import type {
   Viewport,
   WhiteboardElement,
   CanvasSettings,
+  LineElement,
+  RoundedRectangleElement,
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
 import { drawTextElement } from "./text";
@@ -19,9 +21,7 @@ export function renderCanvas(
   canvas: HTMLCanvasElement | null,
   strokes: FreehandStroke[],
   elements: WhiteboardElement[],
-  rectanglePreview: RectangleElement | null,
-  circlePreview: CircleElement | null,
-  arrowPreview: ArrowElement | null,
+  previewElement: WhiteboardElement | null,
   selection: SelectionSet | null,
   viewport: Viewport,
   settings: CanvasSettings,
@@ -81,25 +81,33 @@ export function renderCanvas(
   for (const element of elements) {
     if (element.type === "rectangle") {
       drawRectangle(context, element);
+    } else if (element.type === "roundedRectangle") {
+      drawRoundedRectangle(context, element);
     } else if (element.type === "circle") {
       drawCircle(context, element);
     } else if (element.type === "arrow") {
       drawArrow(context, element);
+    } else if (element.type === "line") {
+      drawLine(context, element);
     } else {
       drawTextElement(context, element);
     }
   }
 
-  if (rectanglePreview) {
-    drawRectangle(context, rectanglePreview);
-  }
-
-  if (circlePreview) {
-    drawCircle(context, circlePreview);
-  }
-
-  if (arrowPreview) {
-    drawArrow(context, arrowPreview);
+  if (previewElement) {
+    if (previewElement.type === "rectangle") {
+      drawRectangle(context, previewElement);
+    } else if (previewElement.type === "roundedRectangle") {
+      drawRoundedRectangle(context, previewElement);
+    } else if (previewElement.type === "circle") {
+      drawCircle(context, previewElement);
+    } else if (previewElement.type === "arrow") {
+      drawArrow(context, previewElement);
+    } else if (previewElement.type === "line") {
+      drawLine(context, previewElement);
+    } else if (previewElement.type === "text") {
+      drawTextElement(context, previewElement);
+    }
   }
 
   if (selection) {
@@ -218,6 +226,75 @@ export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement
     arrow.endX - arrowheadLength * Math.cos(angle + arrowheadAngle),
     arrow.endY - arrowheadLength * Math.sin(angle + arrowheadAngle),
   );
+  context.stroke();
+  context.restore();
+}
+
+export function drawLine(context: CanvasRenderingContext2D, line: LineElement) {
+  context.save();
+  if (line.rotation) {
+    const cx = (line.startX + line.endX) / 2;
+    const cy = (line.startY + line.endY) / 2;
+    context.translate(cx, cy);
+    context.rotate(line.rotation);
+    context.translate(-cx, -cy);
+  }
+  
+  context.strokeStyle = line.strokeColor;
+  context.lineWidth = line.strokeWidth;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.beginPath();
+  context.moveTo(line.startX, line.startY);
+  context.lineTo(line.endX, line.endY);
+  context.stroke();
+  context.restore();
+}
+
+export function drawRoundedRectangle(
+  context: CanvasRenderingContext2D,
+  rectangle: RoundedRectangleElement,
+) {
+  context.save();
+  if (rectangle.rotation) {
+    const cx = rectangle.x + rectangle.width / 2;
+    const cy = rectangle.y + rectangle.height / 2;
+    context.translate(cx, cy);
+    context.rotate(rectangle.rotation);
+    context.translate(-cx, -cy);
+  }
+  context.strokeStyle = rectangle.strokeColor;
+  context.lineWidth = rectangle.strokeWidth;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  
+  context.beginPath();
+  if (typeof context.roundRect === "function") {
+    context.roundRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height, rectangle.radius);
+  } else {
+    // fallback
+    const r = rectangle.radius;
+    const x = rectangle.x;
+    const y = rectangle.y;
+    const w = rectangle.width;
+    const h = rectangle.height;
+    context.moveTo(x + r, y);
+    context.lineTo(x + w - r, y);
+    context.quadraticCurveTo(x + w, y, x + w, y + r);
+    context.lineTo(x + w, y + h - r);
+    context.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    context.lineTo(x + r, y + h);
+    context.quadraticCurveTo(x, y + h, x, y + h - r);
+    context.lineTo(x, y + r);
+    context.quadraticCurveTo(x, y, x + r, y);
+    context.closePath();
+  }
+  
+  if (rectangle.fillColor && rectangle.fillColor !== "transparent" && rectangle.fillColor !== "none") {
+    context.fillStyle = rectangle.fillColor;
+    context.fill();
+  }
+  
   context.stroke();
   context.restore();
 }

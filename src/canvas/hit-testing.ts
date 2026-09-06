@@ -5,6 +5,7 @@ import type {
   FreehandStroke,
   Point,
   RectangleElement,
+  RoundedRectangleElement,
   Selection,
   TextElement,
   WhiteboardElement,
@@ -66,10 +67,14 @@ export function isPointOnElement(
   switch (element.type) {
     case "rectangle":
       return isPointNearRectangle(hitPoint, element);
+    case "roundedRectangle":
+      return isPointNearRoundedRectangle(hitPoint, element);
     case "circle":
       return isPointNearEllipse(hitPoint, element);
     case "arrow":
       return isPointNearArrow(hitPoint, element);
+    case "line":
+      return isPointNearLine(hitPoint, element);
     case "text":
       return isPointInTextBounds(context, hitPoint, element);
   }
@@ -186,4 +191,46 @@ export function isPointInTextBounds(
     point.y >= text.y - text.fontSize - padding &&
     point.y <= text.y + padding
   );
+}
+
+export function isPointNearLine(point: Point, line: { startX: number; startY: number; endX: number; endY: number }) {
+  return distanceToSegment(
+    point,
+    { x: line.startX, y: line.startY },
+    { x: line.endX, y: line.endY },
+  ) <= ERASER_TOLERANCE;
+}
+
+export function isPointNearRoundedRectangle(point: Point, rectangle: RoundedRectangleElement) {
+  const left = rectangle.x;
+  const right = rectangle.x + rectangle.width;
+  const top = rectangle.y;
+  const bottom = rectangle.y + rectangle.height;
+  
+  if (rectangle.fillColor && rectangle.fillColor !== "transparent" && rectangle.fillColor !== "none") {
+    if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) {
+      return true;
+    }
+  }
+
+  const edges = [
+    [
+      { x: left, y: top },
+      { x: right, y: top },
+    ],
+    [
+      { x: right, y: top },
+      { x: right, y: bottom },
+    ],
+    [
+      { x: right, y: bottom },
+      { x: left, y: bottom },
+    ],
+    [
+      { x: left, y: bottom },
+      { x: left, y: top },
+    ],
+  ] as const;
+
+  return edges.some(([start, end]) => distanceToSegment(point, start, end) <= ERASER_TOLERANCE);
 }

@@ -99,8 +99,16 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
       ? (selectedElements[0] as Extract<WhiteboardElement, { strokeWidth: number }>).strokeWidth : "mixed")
     : undefined;
 
-  const fillableElements = selectedElements.filter(e => e.type === "rectangle" || e.type === "circle");
+  const fillableElements = selectedElements.filter(e => e.type === "rectangle" || e.type === "circle" || e.type === "roundedRectangle");
   const hasFillable = fillableElements.length > 0;
+  
+  const roundedRectangleElements = selectedElements.filter(e => e.type === "roundedRectangle");
+  const hasRoundedRectangle = roundedRectangleElements.length > 0;
+  
+  const radius = hasRoundedRectangle 
+    ? (new Set(roundedRectangleElements.map(e => (e as Extract<WhiteboardElement, { radius: number }>).radius)).size === 1 
+      ? (roundedRectangleElements[0] as Extract<WhiteboardElement, { radius: number }>).radius : "mixed")
+    : undefined;
   
   const fillColor = hasFillable 
     ? (new Set(fillableElements.map(e => (e as Extract<WhiteboardElement, { fillColor?: string | null }>).fillColor || "transparent")).size === 1 
@@ -222,6 +230,33 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                     />
                     None
                   </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          {hasRoundedRectangle && (
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-slate-600">Corner Radius</label>
+              <div className="flex items-center gap-2">
+                {radius === "mixed" ? (
+                  <span className="text-xs text-slate-400 italic">Mixed</span>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={radius !== "mixed" && radius !== undefined ? radius : ""}
+                    placeholder={radius === "mixed" ? "Mixed" : "12"}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (!isNaN(val) && val >= 0) onUpdateProperties({ radius: val });
+                    }}
+                    className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                  />
+                  <span className="text-xs text-slate-500">px</span>
                 </div>
               </div>
             </div>

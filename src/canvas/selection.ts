@@ -8,6 +8,7 @@ function getElementBounds(context: CanvasRenderingContext2D, element: Whiteboard
   
   switch (element.type) {
     case "rectangle":
+    case "roundedRectangle":
     case "circle":
       unrotatedBounds = {
         left: element.x,
@@ -15,6 +16,12 @@ function getElementBounds(context: CanvasRenderingContext2D, element: Whiteboard
         right: element.x + element.width,
         bottom: element.y + element.height,
       };
+      break;
+    case "line":
+      unrotatedBounds = getBounds([
+        { x: element.startX, y: element.startY },
+        { x: element.endX, y: element.endY },
+      ]);
       break;
     case "arrow": {
       const angle = Math.atan2(element.endY - element.startY, element.endX - element.startX);

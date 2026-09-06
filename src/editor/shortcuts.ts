@@ -6,6 +6,7 @@ const toolShortcuts: Record<string, Tool> = {
   r: "rectangle",
   o: "circle",
   a: "arrow",
+  l: "line",
   t: "text",
   p: "draw",
   e: "eraser",

@@ -27,8 +27,10 @@ type LayerNode = {
 function getElementLabel(element: WhiteboardElement): string {
   switch (element.type) {
     case "rectangle": return "Rectangle";
+    case "roundedRectangle": return "Rounded Rectangle";
     case "circle": return "Circle";
     case "arrow": return "Arrow";
+    case "line": return "Line";
     case "text": {
       const preview = element.text.length > 10 ? element.text.slice(0, 10) + "..." : element.text;
       return `Text: ${preview}`;

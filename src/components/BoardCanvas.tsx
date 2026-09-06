@@ -1,9 +1,12 @@
 "use client";
 
+import { createLine, createRoundedRectangle } from "@/editor/tools";
 import type { ChangeEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type {
   ArrowElement,
+  LineElement,
+  RoundedRectangleElement,
   CanvasSettings,
   CircleElement,
   CreationRecord,
@@ -101,6 +104,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const activeCircleStartRef = useRef<Point | null>(null);
   const activeArrowRef = useRef<ArrowElement | null>(null);
   const activeArrowStartRef = useRef<Point | null>(null);
+  const activeLineRef = useRef<LineElement | null>(null);
+  const activeLineStartRef = useRef<Point | null>(null);
+  const activeRoundedRectangleRef = useRef<RoundedRectangleElement | null>(null);
+  const activeRoundedRectangleStartRef = useRef<Point | null>(null);
   const textInputRef = useRef<HTMLInputElement>(null);
   const textEditorRef = useRef<TextEditorState | null>(null);
   const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
@@ -192,9 +199,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      activeRectangleRef.current,
-      activeCircleRef.current,
-      activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
@@ -267,7 +272,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current = [{ kind: "group", value: group }];
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
-        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
@@ -283,7 +288,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         .map(element => ({ kind: "element", value: element }));
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
-        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
@@ -299,10 +304,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      null,
-      null,
-      null,
-      selectionRef.current,
+      null, selectionRef.current,
       viewportRef.current, canvasSettings);
     addHistory();
     notifyLayerChange();
@@ -332,7 +334,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
-      activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current, viewportRef.current, canvasSettings);
     addHistory();
     notifyClipboardChange();
@@ -363,7 +365,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
-      activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current, viewportRef.current, canvasSettings);
     addHistory();
     notifyClipboardChange();
@@ -385,7 +387,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (moved) {
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
-        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
     }
@@ -395,7 +397,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     selectionRef.current = [...selections];
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
-      activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current, viewportRef.current, canvasSettings);
     notifyLayerChange();
   };
@@ -422,7 +424,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current = [];
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
-        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
@@ -469,7 +471,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (changed) {
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
-        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
@@ -513,9 +515,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         canvas,
         strokesRef.current,
         elementsRef.current,
-        activeRectangleRef.current,
-        activeCircleRef.current,
-        activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current,
         viewportRef.current, canvasSettings);
     };
@@ -559,9 +559,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      activeRectangleRef.current,
-      activeCircleRef.current,
-      activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
@@ -713,10 +711,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         canvasRef.current,
         strokesRef.current,
         elementsRef.current,
-        null,
-        null,
-        null,
-        selectionRef.current,
+        null, selectionRef.current,
         viewportRef.current, canvasSettings);
       return;
     }
@@ -739,9 +734,15 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       activeCircleStartRef.current = point;
       activeCircleRef.current = createCircle(point, point);
     } else if (activeTool === "arrow") {
-      activeArrowStartRef.current = point;
-      activeArrowRef.current = createArrow(point, point);
-    } else {
+        activeArrowStartRef.current = point;
+        activeArrowRef.current = createArrow(point, point);
+      } else if (activeTool === "line") {
+        activeLineStartRef.current = point;
+        activeLineRef.current = createLine(point, point);
+      } else if (activeTool === "roundedRectangle") {
+        activeRoundedRectangleStartRef.current = point;
+        activeRoundedRectangleRef.current = createRoundedRectangle(point, point);
+      } else {
       const stroke = [point];
       activeStrokeRef.current = stroke;
       strokesRef.current.push(stroke);
@@ -752,9 +753,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      activeRectangleRef.current,
-      activeCircleRef.current,
-      activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
@@ -820,10 +819,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      null,
-      null,
-      null,
-      selectionRef.current,
+      null, selectionRef.current,
       viewportRef.current, canvasSettings);
     addHistory();
   };
@@ -914,10 +910,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvas,
       strokesRef.current,
       elementsRef.current,
-      null,
-      null,
-      null,
-      selectionRef.current,
+      null, selectionRef.current,
       viewportRef.current, canvasSettings);
   };
 
@@ -936,10 +929,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      null,
-      null,
-      null,
-      selectionRef.current,
+      null, selectionRef.current,
       viewportRef.current, canvasSettings);
     return true;
   };
@@ -1010,10 +1000,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             canvasRef.current,
             strokesRef.current,
             elementsRef.current,
-            null,
-            null,
-            null,
-            selectionRef.current,
+            null, selectionRef.current,
             viewportRef.current, canvasSettings);
           actions.notifyClipboardChange();
           actions.notifyLayerChange();
@@ -1135,9 +1122,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         canvasRef.current,
         strokesRef.current,
         elementsRef.current,
-        activeRectangleRef.current,
-        activeCircleRef.current,
-        activeArrowRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current,
         viewportRef.current, canvasSettings);
       return;
@@ -1192,10 +1177,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           canvasRef.current,
           strokesRef.current,
           elementsRef.current,
-          null,
-          null,
-          null,
-          selectionRef.current,
+          null, selectionRef.current,
           viewportRef.current, canvasSettings);
         return;
       }
@@ -1219,10 +1201,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           canvasRef.current,
           strokesRef.current,
           elementsRef.current,
-          null,
-          null,
-          null,
-          selectionRef.current,
+          null, selectionRef.current,
           viewportRef.current, canvasSettings);
       }
       return;
@@ -1249,6 +1228,20 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       if (arrow && start) {
         activeArrowRef.current = createArrow(start, point);
       }
+    } else if (activeTool === "line") {
+      const line = activeLineRef.current;
+      const start = activeLineStartRef.current;
+
+      if (line && start) {
+        activeLineRef.current = createLine(start, point);
+      }
+    } else if (activeTool === "roundedRectangle") {
+      const rect = activeRoundedRectangleRef.current;
+      const start = activeRoundedRectangleStartRef.current;
+
+      if (rect && start) {
+        activeRoundedRectangleRef.current = createRoundedRectangle(start, point);
+      }
     } else {
       const stroke = activeStrokeRef.current;
 
@@ -1261,9 +1254,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      activeRectangleRef.current,
-      activeCircleRef.current,
-      activeArrowRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
@@ -1311,7 +1302,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         }
         activeArrowRef.current = null;
         activeArrowStartRef.current = null;
-    } else {
+      } else if (activeTool === "line") {
+        const line = activeLineRef.current;
+
+        if (line && (line.startX !== line.endX || line.startY !== line.endY)) {
+          elementsRef.current.push(line);
+          creationOrderRef.current.push({ kind: "element", value: line });
+        }
+        activeLineRef.current = null;
+        activeLineStartRef.current = null;
+      } else if (activeTool === "roundedRectangle") {
+        const rect = activeRoundedRectangleRef.current;
+
+        if (rect && rect.width > 0 && rect.height > 0) {
+          elementsRef.current.push(rect);
+          creationOrderRef.current.push({ kind: "element", value: rect });
+        }
+        activeRoundedRectangleRef.current = null;
+        activeRoundedRectangleStartRef.current = null;
+      } else {
       activeStrokeRef.current = null;
     }
 
@@ -1327,10 +1336,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           canvasRef.current,
           strokesRef.current,
           elementsRef.current,
-          null,
-          null,
-          null,
-          selectionRef.current,
+          null, selectionRef.current,
           viewportRef.current, canvasSettings);
         if (rotation.moved) {
           addHistory();
@@ -1354,10 +1360,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           canvasRef.current,
           strokesRef.current,
           elementsRef.current,
-          null,
-          null,
-          null,
-          selectionRef.current,
+          null, selectionRef.current,
           viewportRef.current, canvasSettings);
         if (multiDrag.moved) {
           addHistory();
@@ -1374,10 +1377,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         canvasRef.current,
         strokesRef.current,
         elementsRef.current,
-        null,
-        null,
-        null,
-        selectionRef.current,
+        null, selectionRef.current,
         viewportRef.current, canvasSettings);
       addHistory();
       return;
@@ -1392,10 +1392,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasRef.current,
       strokesRef.current,
       elementsRef.current,
-      null,
-      null,
-      null,
-      selectionRef.current,
+      null, selectionRef.current,
       viewportRef.current, canvasSettings);
     addHistory();
   };
@@ -1449,10 +1446,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         canvasRef.current,
         strokesRef.current,
         elementsRef.current,
-        null,
-        null,
-        null,
-        selectionRef.current,
+        null, selectionRef.current,
         viewportRef.current, canvasSettings);
       addHistory();
       return;

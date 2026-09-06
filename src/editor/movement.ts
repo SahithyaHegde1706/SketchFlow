@@ -32,12 +32,12 @@ export function moveSelection(
     return;
   }
 
-  if (selection.value.type === "arrow" && original.type === "arrow") {
+  if ((selection.value.type === "arrow" || selection.value.type === "line") && (original.type === "arrow" || original.type === "line")) {
     selection.value.startX = original.startX + deltaX;
     selection.value.startY = original.startY + deltaY;
     selection.value.endX = original.endX + deltaX;
     selection.value.endY = original.endY + deltaY;
-  } else if (selection.value.type !== "arrow" && original.type !== "arrow") {
+  } else if (selection.value.type !== "arrow" && selection.value.type !== "line" && original.type !== "arrow" && original.type !== "line") {
     selection.value.x = original.x + deltaX;
     selection.value.y = original.y + deltaY;
   }

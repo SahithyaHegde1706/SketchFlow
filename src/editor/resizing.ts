@@ -54,6 +54,7 @@ export function resizeSelection(
 
   if (
     (selection.value.type === "rectangle" && original.type === "rectangle") ||
+    (selection.value.type === "roundedRectangle" && original.type === "roundedRectangle") ||
     (selection.value.type === "circle" && original.type === "circle")
   ) {
     let newLeft = original.x;
@@ -76,7 +77,11 @@ export function resizeSelection(
     selection.value.y = Math.min(newTop, newBottom);
     selection.value.width = Math.max(1, Math.abs(newRight - newLeft));
     selection.value.height = Math.max(1, Math.abs(newBottom - newTop));
-  } else if (selection.value.type === "arrow" && original.type === "arrow") {
+    
+    if (selection.value.type === "roundedRectangle" && original.type === "roundedRectangle") {
+      selection.value.radius = Math.min(original.radius, Math.min(selection.value.width, selection.value.height) / 2);
+    }
+  } else if ((selection.value.type === "arrow" || selection.value.type === "line") && (original.type === "arrow" || original.type === "line")) {
     let origBounds: Bounds;
     if (context) {
       origBounds = getSelectionBounds(context, { kind: "element", value: original });

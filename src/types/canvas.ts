@@ -43,6 +43,32 @@ export type ArrowElement = {
   rotation?: number;
 };
 
+export type LineElement = {
+  id: string;
+  type: "line";
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  strokeColor: string;
+  strokeWidth: number;
+  rotation?: number;
+};
+
+export type RoundedRectangleElement = {
+  id: string;
+  type: "roundedRectangle";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  strokeColor: string;
+  strokeWidth: number;
+  fillColor?: string | null;
+  rotation?: number;
+};
+
 export type TextElement = {
   id: string;
   type: "text";
@@ -62,8 +88,10 @@ export type TextElement = {
 
 export type WhiteboardElement =
   | RectangleElement
+  | RoundedRectangleElement
   | CircleElement
   | ArrowElement
+  | LineElement
   | TextElement;
 
 export type Group = {
@@ -82,8 +110,10 @@ export type Tool =
   | "select"
   | "hand"
   | "rectangle"
+  | "roundedRectangle"
   | "circle"
   | "arrow"
+  | "line"
   | "text"
   | "draw"
   | "eraser";
