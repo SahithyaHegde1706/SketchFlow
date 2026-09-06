@@ -191,3 +191,14 @@ export type AlignOperation =
   | "align-bottom"
   | "distribute-horizontal"
   | "distribute-vertical";
+
+export type MarqueeState = {
+  /** X coordinate of where the drag started, in logical (canvas) coordinates. */
+  startX: number;
+  /** Y coordinate of where the drag started, in logical (canvas) coordinates. */
+  startY: number;
+  /** Current X coordinate of the pointer, in logical (canvas) coordinates. */
+  currentX: number;
+  /** Current Y coordinate of the pointer, in logical (canvas) coordinates. */
+  currentY: number;
+};

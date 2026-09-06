@@ -1,5 +1,6 @@
 import type {
   ArrowElement,
+  Bounds,
   CircleElement,
   FreehandStroke,
   RectangleElement,
@@ -280,5 +281,55 @@ export function drawRoundedRectangle(
   }
   
   context.stroke();
+  context.restore();
+}
+
+/**
+ * Draw the transient marquee selection rectangle on top of the already-rendered
+ * canvas content.
+ *
+ * Must be called AFTER `renderCanvas` because it draws in the same canvas
+ * context. `renderCanvas` leaves the context with only the devicePixelRatio
+ * scale active; this function re-applies the viewport translate + scale so the
+ * marquee rect is expressed in logical (canvas) coordinates and correctly
+ * follows pan/zoom.
+ *
+ * @param canvas        The same HTMLCanvasElement used by `renderCanvas`.
+ * @param marqueeBounds Normalized marquee rectangle in logical coordinates.
+ * @param viewport      Current viewport (offsetX, offsetY, scale).
+ */
+export function renderMarquee(
+  canvas: HTMLCanvasElement | null,
+  marqueeBounds: Bounds,
+  viewport: Viewport,
+): void {
+  if (!canvas) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const x = marqueeBounds.left;
+  const y = marqueeBounds.top;
+  const w = marqueeBounds.right - marqueeBounds.left;
+  const h = marqueeBounds.bottom - marqueeBounds.top;
+
+  // Re-apply the viewport transform on top of the devicePixelRatio scale that
+  // renderCanvas already set. This keeps the marquee in logical space.
+  context.save();
+  context.translate(viewport.offsetX, viewport.offsetY);
+  context.scale(viewport.scale, viewport.scale);
+
+  // Translucent teal fill — same accent colour as selection handles.
+  context.fillStyle = "rgba(13, 148, 136, 0.06)";
+  context.fillRect(x, y, w, h);
+
+  // Dashed border. Scale the line-width and dash sizes inverse to zoom so they
+  // always appear at ~1.5 px regardless of the current zoom level.
+  const invScale = 1 / viewport.scale;
+  context.strokeStyle = "#0d9488";
+  context.lineWidth = 1.5 * invScale;
+  context.setLineDash([5 * invScale, 4 * invScale]);
+  context.strokeRect(x, y, w, h);
+
+  context.setLineDash([]);
   context.restore();
 }
