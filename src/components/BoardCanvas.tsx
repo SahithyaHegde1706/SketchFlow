@@ -71,6 +71,7 @@ export type BoardCanvasHandle = {
   duplicate: () => void;
   deleteSelection: () => void;
   setSelection: (selections: SelectionSet) => void;
+  updateProperties: (updates: Partial<WhiteboardElement>) => void;
   applyLayerOperation: (operation: LayerOperation) => void;
   group: () => void;
   ungroup: () => void;
@@ -433,6 +434,36 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   };
 
+  const handleUpdateProperties = (updates: Partial<WhiteboardElement>) => {
+    if (selectionRef.current.length === 0) return;
+    
+    let changed = false;
+    for (const selection of selectionRef.current) {
+      if (selection.kind === "element") {
+        Object.assign(selection.value, updates);
+        changed = true;
+      } else if (selection.kind === "group") {
+        for (const id of selection.value.elementIds) {
+          const element = elementsRef.current.find(e => e.id === id);
+          if (element) {
+            Object.assign(element, updates);
+            changed = true;
+          }
+        }
+      }
+    }
+    
+    if (changed) {
+      renderCanvas(
+        canvasRef.current, strokesRef.current, elementsRef.current,
+        activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
+        selectionRef.current, viewportRef.current,
+      );
+      addHistory();
+      notifyLayerChange();
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     undo: handleUndo,
     redo: handleRedo,
@@ -441,6 +472,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     duplicate: handleDuplicate,
     deleteSelection: handleDeleteSelection,
     setSelection: handleSetSelection,
+    updateProperties: handleUpdateProperties,
     applyLayerOperation: handleLayerOperation,
     group: handleGroup,
     ungroup: handleUngroup,

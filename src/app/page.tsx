@@ -6,13 +6,14 @@ import type { BoardCanvasHandle } from "@/components/BoardCanvas";
 import { BoardHeader } from "@/components/BoardHeader";
 import { ToolRail } from "@/components/ToolRail";
 import { LayersPanel } from "@/components/LayersPanel";
+import { PropertiesPanel } from "@/components/PropertiesPanel";
 import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 
-import type { Tool, CreationRecord, Group, SelectionSet } from "@/types/canvas";
+import type { Tool, CreationRecord, Group, SelectionSet, WhiteboardElement } from "@/types/canvas";
 
 export default function Home() {
   const [activeTool, setActiveTool] = useState<Tool>("select");
-  const [isLayersOpen, setIsLayersOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<"layers" | "properties" | null>(null);
   const [documentState, setDocumentState] = useState({
     records: [] as CreationRecord[],
     groups: [] as Group[],
@@ -45,8 +46,8 @@ export default function Home() {
         canAlign={alignAvailability.canAlign}
         canDistribute={alignAvailability.canDistribute}
         onAlign={(operation) => boardRef.current?.align(operation)}
-        isLayersOpen={isLayersOpen}
-        onToggleLayers={() => setIsLayersOpen(!isLayersOpen)}
+        activePanel={activePanel}
+        onTogglePanel={(panel) => setActivePanel(activePanel === panel ? null : panel)}
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} />
@@ -60,16 +61,30 @@ export default function Home() {
           onAlignAvailabilityChange={(canAlign, canDistribute) => setAlignAvailability({ canAlign, canDistribute })}
           onDocumentChange={(records, groups, selections) => setDocumentState({ records, groups, selections })}
         />
-        <LayersPanel
-          isOpen={isLayersOpen}
-          onClose={() => setIsLayersOpen(false)}
-          records={documentState.records}
-          groups={documentState.groups}
-          selections={documentState.selections}
-          onSelect={(selections) => boardRef.current?.setSelection(selections)}
-          onDelete={() => boardRef.current?.deleteSelection()}
-          onLayerOperation={(op) => boardRef.current?.applyLayerOperation(op)}
-        />
+        {activePanel && (
+          <div className="absolute right-0 top-16 bottom-0 w-64 bg-white/95 backdrop-blur border-l border-slate-200/80 shadow-xl flex flex-col z-50 transform transition-transform">
+            {activePanel === "layers" && (
+              <LayersPanel
+                isOpen={true}
+                onClose={() => setActivePanel(null)}
+                records={documentState.records}
+                groups={documentState.groups}
+                selections={documentState.selections}
+                onSelect={(selections) => boardRef.current?.setSelection(selections)}
+                onDelete={() => boardRef.current?.deleteSelection()}
+                onLayerOperation={(op) => boardRef.current?.applyLayerOperation(op)}
+              />
+            )}
+            {activePanel === "properties" && (
+              <PropertiesPanel
+                selections={documentState.selections}
+                elements={documentState.records.map(r => r.kind === "element" ? r.value : null).filter(Boolean) as WhiteboardElement[]}
+                groups={documentState.groups}
+                onUpdateProperties={(updates) => boardRef.current?.updateProperties(updates)}
+              />
+            )}
+          </div>
+        )}
       </div>
     </main>
   );

@@ -18,8 +18,8 @@ type BoardHeaderProps = {
   canAlign?: boolean;
   canDistribute?: boolean;
   onAlign?: (operation: AlignOperation) => void;
-  isLayersOpen: boolean;
-  onToggleLayers: () => void;
+  activePanel: "layers" | "properties" | null;
+  onTogglePanel: (panel: "layers" | "properties") => void;
 };
 
 const MoreIcon = () => <span aria-hidden="true">...</span>;
@@ -38,8 +38,8 @@ export function BoardHeader({
   canAlign = false,
   canDistribute = false,
   onAlign,
-  isLayersOpen,
-  onToggleLayers,
+  activePanel,
+  onTogglePanel,
 }: BoardHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7">
@@ -110,24 +110,44 @@ export function BoardHeader({
           <span aria-hidden="true" className="text-base leading-none">↗</span>
           <span className="hidden sm:inline">Share</span>
         </button>
-        <button
-          type="button"
-          onClick={onToggleLayers}
-          aria-label={isLayersOpen ? "Close layers panel" : "Open layers panel"}
-          title="Layers"
-          className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 ${
-            isLayersOpen
-              ? "border-teal-300 bg-teal-50 text-teal-800"
-              : "border-slate-200 bg-white text-slate-700 shadow-sm hover:border-teal-300 hover:bg-teal-50 hover:text-teal-800"
-          }`}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="12 2 2 7 12 12 22 7 12 2" />
-            <polyline points="2 12 12 17 22 12" />
-            <polyline points="2 17 12 22 22 17" />
-          </svg>
-          <span className="hidden sm:inline">Layers</span>
-        </button>
+        <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => onTogglePanel("layers")}
+            aria-label={activePanel === "layers" ? "Close layers panel" : "Open layers panel"}
+            title="Layers"
+            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition ${
+              activePanel === "layers"
+                ? "bg-teal-50 text-teal-800"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="12 2 2 7 12 12 22 7 12 2" />
+              <polyline points="2 12 12 17 22 12" />
+              <polyline points="2 17 12 22 22 17" />
+            </svg>
+            <span className="hidden sm:inline">Layers</span>
+          </button>
+          <div className="w-px h-4 bg-slate-200 mx-0.5" />
+          <button
+            type="button"
+            onClick={() => onTogglePanel("properties")}
+            aria-label={activePanel === "properties" ? "Close properties panel" : "Open properties panel"}
+            title="Properties"
+            className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition ${
+              activePanel === "properties"
+                ? "bg-teal-50 text-teal-800"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+            <span className="hidden sm:inline">Properties</span>
+          </button>
+        </div>
         <button
           type="button"
           aria-label="More board options"

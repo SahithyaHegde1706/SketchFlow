@@ -149,7 +149,7 @@ export function LayersPanel({
   if (!isOpen) return null;
 
   return (
-    <div className="absolute right-0 top-16 bottom-0 w-64 bg-white/95 backdrop-blur border-l border-slate-200/80 shadow-xl flex flex-col z-50 transform transition-transform">
+    <div className="h-full flex flex-col">
       <div className="flex items-center justify-between p-3 border-b border-slate-100">
         <h2 className="text-sm font-semibold text-slate-800">Layers</h2>
         <button
