@@ -22,6 +22,7 @@ import type {
   Selection,
   SelectionSet,
   TextElement,
+  MarqueeState,
   TextEditorState,
   Tool,
   Viewport,
@@ -33,6 +34,8 @@ import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canva
 import { findResizeHandleAtPoint, getCombinedSelectionBounds } from "@/canvas/selection";
 import { screenToLogical, zoomViewport } from "@/canvas/geometry";
 import { shouldSamplePoint } from "@/canvas/freehand";
+import { normalizeMarqueeBounds, getMarqueeSelections, MIN_MARQUEE_DISTANCE, unionSelections } from "@/editor/marquee";
+import { renderMarquee } from "@/canvas/renderer";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
 import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
@@ -117,7 +120,28 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const historyRef = useRef<HistoryState | null>(null);
   const activeToolRef = useRef(activeTool);
   const keyboardMovementPendingRef = useRef(false);
+  /** Transient marquee drag state (logical coords). Null when no drag is active. */
+  const marqueeRef = useRef<MarqueeState | null>(null);
+  /** Selection that existed before the current marquee started (for Escape restore). */
+  const preMarqueeSelectionRef = useRef<SelectionSet>([]);
+  /** Whether the marquee was started with Shift held (additive mode). */
+  const marqueeShiftRef = useRef(false);
   activeToolRef.current = activeTool;
+
+  const drawCanvas = () => {
+    renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
+      selectionRef.current,
+      viewportRef.current,
+      canvasSettings,
+    );
+    if (marqueeRef.current && canvasRef.current) {
+      renderMarquee(canvasRef.current, normalizeMarqueeBounds(marqueeRef.current), viewportRef.current);
+    }
+  };
 
   const addHistory = () => {
     if (!historyRef.current) return;
@@ -662,21 +686,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         };
         activePointerIdRef.current = event.pointerId;
         event.currentTarget.setPointerCapture(event.pointerId);
-      } else if (event.shiftKey) {
-        if (clickedSelection) {
-          selectionRef.current = selectionIncludes(currentSelection, clickedSelection)
-            ? currentSelection.filter(selection => !selectionIncludes([selection], clickedSelection))
-            : [...currentSelection, clickedSelection];
-          notifyLayerChange();
-        }
-        dragRef.current = null;
-        multiDragRef.current = null;
-      } else if (!clickedSelection) {
-        selectionRef.current = [];
-        dragRef.current = null;
-        multiDragRef.current = null;
+      } else if (event.shiftKey && clickedSelection) {
+        selectionRef.current = selectionIncludes(currentSelection, clickedSelection)
+          ? currentSelection.filter(selection => !selectionIncludes([selection], clickedSelection))
+          : [...currentSelection, clickedSelection];
         notifyLayerChange();
-      } else {
+        dragRef.current = null;
+        multiDragRef.current = null;
+      } else if (clickedSelection) {
         const wasSelected = selectionIncludes(currentSelection, clickedSelection);
         const activeSelection = wasSelected ? currentSelection : [clickedSelection];
         const isGroupOrMulti = activeSelection.length > 1 || activeSelection.some((s) => s.kind === "group");
@@ -708,14 +725,23 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           activePointerIdRef.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
         }
+      } else {
+        // Pointer down on empty canvas space -> initialize marquee drag
+        preMarqueeSelectionRef.current = [...currentSelection];
+        marqueeShiftRef.current = event.shiftKey;
+        marqueeRef.current = {
+          startX: point.x,
+          startY: point.y,
+          currentX: point.x,
+          currentY: point.y,
+        };
+        activePointerIdRef.current = event.pointerId;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragRef.current = null;
+        multiDragRef.current = null;
       }
 
-      renderCanvas(
-        canvasRef.current,
-        strokesRef.current,
-        elementsRef.current,
-        null, selectionRef.current,
-        viewportRef.current, canvasSettings);
+      drawCanvas();
       return;
     }
 
@@ -887,6 +913,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       dragRef.current = null;
     }
 
+    if (marqueeRef.current) {
+      // Cancel active marquee and restore the selection that existed before it started.
+      marqueeRef.current = null;
+      selectionRef.current = [...preMarqueeSelectionRef.current];
+      notifyLayerChange();
+    }
+
     if (panRef.current) {
       viewportRef.current = {
         ...viewportRef.current,
@@ -909,12 +942,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     activePointerIdRef.current = null;
     if (canvas) canvas.style.cursor = activeToolRef.current === "hand" ? "grab" : "";
 
-    renderCanvas(
-      canvas,
-      strokesRef.current,
-      elementsRef.current,
-      null, selectionRef.current,
-      viewportRef.current, canvasSettings);
+    drawCanvas();
   };
 
   const moveSelectedByKeyboard = (deltaX: number, deltaY: number) => {
@@ -1166,6 +1194,41 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "select") {
+      if (activePointerIdRef.current === event.pointerId && marqueeRef.current) {
+        const marquee = marqueeRef.current;
+        marquee.currentX = point.x;
+        marquee.currentY = point.y;
+
+        const dx = Math.abs(marquee.currentX - marquee.startX);
+        const dy = Math.abs(marquee.currentY - marquee.startY);
+
+        if (dx >= MIN_MARQUEE_DISTANCE || dy >= MIN_MARQUEE_DISTANCE) {
+          const context = canvasRef.current?.getContext("2d");
+          if (context) {
+            const bounds = normalizeMarqueeBounds(marquee);
+            const marqueeSelections = getMarqueeSelections(
+              context,
+              bounds,
+              creationOrderRef.current,
+              elementsRef.current,
+              groupsRef.current,
+            );
+
+            if (marqueeShiftRef.current) {
+              selectionRef.current = unionSelections(preMarqueeSelectionRef.current, marqueeSelections);
+            } else {
+              selectionRef.current = marqueeSelections;
+            }
+          }
+        } else {
+          if (marqueeShiftRef.current) {
+            selectionRef.current = [...preMarqueeSelectionRef.current];
+          }
+        }
+        drawCanvas();
+        return;
+      }
+
       const multiDrag = multiDragRef.current;
       if (multiDrag) {
         const deltaX = point.x - multiDrag.pointerStart.x;
@@ -1332,6 +1395,61 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "select") {
+      if (marqueeRef.current) {
+        const marquee = marqueeRef.current;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        activePointerIdRef.current = null;
+        marqueeRef.current = null;
+
+        if (event.type === "pointercancel") {
+          selectionRef.current = [...preMarqueeSelectionRef.current];
+          notifyLayerChange();
+          drawCanvas();
+          return;
+        }
+
+        const point = screenToLogical(getPoint(event), viewportRef.current);
+        const dx = Math.abs(point.x - marquee.startX);
+        const dy = Math.abs(point.y - marquee.startY);
+
+        if (dx >= MIN_MARQUEE_DISTANCE || dy >= MIN_MARQUEE_DISTANCE) {
+          const context = canvasRef.current?.getContext("2d");
+          if (context) {
+            const bounds = normalizeMarqueeBounds({
+              startX: marquee.startX,
+              startY: marquee.startY,
+              currentX: point.x,
+              currentY: point.y,
+            });
+            const marqueeSelections = getMarqueeSelections(
+              context,
+              bounds,
+              creationOrderRef.current,
+              elementsRef.current,
+              groupsRef.current,
+            );
+            if (marqueeShiftRef.current) {
+              selectionRef.current = unionSelections(preMarqueeSelectionRef.current, marqueeSelections);
+            } else {
+              selectionRef.current = marqueeSelections;
+            }
+          }
+          notifyLayerChange();
+        } else {
+          if (marqueeShiftRef.current) {
+            selectionRef.current = [...preMarqueeSelectionRef.current];
+          } else {
+            selectionRef.current = [];
+          }
+          notifyLayerChange();
+        }
+
+        drawCanvas();
+        return;
+      }
+
       const rotation = rotationRef.current;
       if (rotation) {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) {
