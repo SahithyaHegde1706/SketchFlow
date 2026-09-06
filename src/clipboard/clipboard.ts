@@ -1,7 +1,46 @@
-import type { Group, Selection, SelectionSet, WhiteboardElement, FreehandStroke } from "@/types/canvas";
-import type { ClipboardState } from "./types";
+import type { CreationRecord, Group, Selection, SelectionSet, WhiteboardElement, FreehandStroke } from "@/types/canvas";
+import type { ClipboardState, DuplicateState } from "./types";
 
-export function copyToClipboard(selection: SelectionSet, elements: WhiteboardElement[], groups: Group[]): ClipboardState {
+export function createDuplicateState(): DuplicateState {
+  return {
+    sequenceCount: 0,
+    lastSelectionSnapshot: null,
+  };
+}
+
+export function resetDuplicateState(state: DuplicateState): void {
+  state.sequenceCount = 0;
+  state.lastSelectionSnapshot = null;
+}
+
+export function areSelectionsEqual(setA: SelectionSet | null, setB: SelectionSet | null): boolean {
+  if (!setA || !setB) return false;
+  if (setA.length !== setB.length) return false;
+  if (setA.length === 0) return false;
+
+  return setA.every((itemA, index) => {
+    const itemB = setB[index];
+    if (!itemB || itemA.kind !== itemB.kind) return false;
+
+    if (itemA.kind === "stroke" && itemB.kind === "stroke") {
+      return itemA.value === itemB.value;
+    }
+    if (itemA.kind === "element" && itemB.kind === "element") {
+      return itemA.value.id === itemB.value.id;
+    }
+    if (itemA.kind === "group" && itemB.kind === "group") {
+      return itemA.value.id === itemB.value.id;
+    }
+    return false;
+  });
+}
+
+export function copyToClipboard(
+  selection: SelectionSet,
+  elements: WhiteboardElement[],
+  groups: Group[],
+  creationOrder?: CreationRecord[]
+): ClipboardState {
   if (selection.length === 0) {
     return { item: null };
   }
@@ -13,11 +52,55 @@ export function copyToClipboard(selection: SelectionSet, elements: WhiteboardEle
     return [];
   }));
   const selectedGroups = groups.filter(group => selection.some(item => item.kind === "group" && item.value.id === group.id));
-  return { item: JSON.parse(JSON.stringify({
-    selections: selection,
-    elements: elements.filter(element => selectedElementIds.has(element.id)),
-    groups: selectedGroups,
-  })) };
+
+  const selectionsCopy = selection.map(item => {
+    if (item.kind === "stroke") {
+      const strokeCopy: FreehandStroke = item.value.map(p => ({ ...p }));
+      if (item.value.locked) {
+        strokeCopy.locked = true;
+      }
+      return { kind: "stroke" as const, value: strokeCopy };
+    }
+    return item;
+  });
+
+  const elementsCopy: WhiteboardElement[] = JSON.parse(
+    JSON.stringify(elements.filter(element => selectedElementIds.has(element.id)))
+  );
+  const groupsCopy: Group[] = JSON.parse(JSON.stringify(selectedGroups));
+
+  let creationRecordsCopy: CreationRecord[] | undefined;
+  if (creationOrder) {
+    const selectedStrokes = new Set(
+      selection.filter((item): item is Extract<Selection, { kind: "stroke" }> => item.kind === "stroke").map(s => s.value)
+    );
+    creationRecordsCopy = creationOrder
+      .filter(record => {
+        if (record.kind === "element") {
+          return selectedElementIds.has(record.value.id);
+        }
+        return selectedStrokes.has(record.value);
+      })
+      .map(record => {
+        if (record.kind === "element") {
+          const found = elementsCopy.find(e => e.id === record.value.id);
+          return found ? { kind: "element" as const, value: found } : null;
+        }
+        const strokeIndex = selection.findIndex(s => s.kind === "stroke" && s.value === record.value);
+        const strokeCopy = strokeIndex >= 0 ? (selectionsCopy[strokeIndex].value as FreehandStroke) : null;
+        return strokeCopy ? { kind: "stroke" as const, value: strokeCopy } : null;
+      })
+      .filter((rec): rec is CreationRecord => rec !== null);
+  }
+
+  return {
+    item: {
+      selections: selectionsCopy,
+      elements: elementsCopy,
+      groups: groupsCopy,
+      ...(creationRecordsCopy ? { creationRecords: creationRecordsCopy } : {}),
+    },
+  };
 }
 
 export function getClipboard(state: ClipboardState) {
@@ -26,7 +109,36 @@ export function getClipboard(state: ClipboardState) {
   }
   
   // Return deep clone to prevent accidental mutations by caller
-  return JSON.parse(JSON.stringify(state.item)) as NonNullable<ClipboardState["item"]>;
+  const item = state.item;
+  const elementsCopy: WhiteboardElement[] = JSON.parse(JSON.stringify(item.elements));
+  const groupsCopy: Group[] = JSON.parse(JSON.stringify(item.groups));
+  const selectionsCopy = item.selections.map(sel => {
+    if (sel.kind === "stroke") {
+      const strokeCopy: FreehandStroke = sel.value.map(p => ({ ...p }));
+      if (sel.value.locked) strokeCopy.locked = true;
+      return { kind: "stroke" as const, value: strokeCopy };
+    }
+    return sel;
+  });
+
+  const creationRecordsCopy = item.creationRecords
+    ? item.creationRecords.map(rec => {
+        if (rec.kind === "element") {
+          const found = elementsCopy.find(e => e.id === rec.value.id);
+          return found ? { kind: "element" as const, value: found } : rec;
+        }
+        const strokeCopy: FreehandStroke = rec.value.map(p => ({ ...p }));
+        if (rec.value.locked) strokeCopy.locked = true;
+        return { kind: "stroke" as const, value: strokeCopy };
+      })
+    : undefined;
+
+  return {
+    selections: selectionsCopy,
+    elements: elementsCopy,
+    groups: groupsCopy,
+    ...(creationRecordsCopy ? { creationRecords: creationRecordsCopy } : {}),
+  };
 }
 
 export function offsetSelection(selection: Selection, offsetAmount: number = 20): Selection {
@@ -46,7 +158,12 @@ export function offsetSelection(selection: Selection, offsetAmount: number = 20)
   }
 
   if (selection.kind === "group") {
-    return { kind: "group", value: { ...selection.value, elementIds: [...selection.value.elementIds] } };
+    const newGroup: Group = {
+      ...selection.value,
+      id: crypto.randomUUID(),
+      elementIds: [...selection.value.elementIds],
+    };
+    return { kind: "group", value: newGroup };
   }
 
   // It's a structured element, offset position and create a new UUID
@@ -54,14 +171,14 @@ export function offsetSelection(selection: Selection, offsetAmount: number = 20)
   let newElement: WhiteboardElement;
   const newId = crypto.randomUUID();
 
-  if (element.type === "rectangle" || element.type === "circle" || element.type === "text") {
+  if (element.type === "rectangle" || element.type === "roundedRectangle" || element.type === "circle" || element.type === "text") {
     newElement = {
       ...element,
       id: newId,
       x: element.x + offsetAmount,
       y: element.y + offsetAmount,
     };
-  } else if (element.type === "arrow") {
+  } else if (element.type === "arrow" || element.type === "line") {
     newElement = {
       ...element,
       id: newId,
@@ -93,7 +210,11 @@ export function offsetClipboard(clipboard: NonNullable<ClipboardState["item"]>, 
   const groups = clipboard.groups.map(group => ({
     id: crypto.randomUUID(),
     elementIds: group.elementIds.map(id => idMap.get(id)).filter((id): id is string => !!id),
+    ...(group.locked !== undefined ? { locked: group.locked } : {}),
   }));
+
+  const strokeMap = new Map<FreehandStroke, FreehandStroke>();
+
   const selections = clipboard.selections.map(selection => {
     if (selection.kind === "element") {
       const element = elements.find(item => item.id === idMap.get(selection.value.id));
@@ -104,7 +225,27 @@ export function offsetClipboard(clipboard: NonNullable<ClipboardState["item"]>, 
       const group = groups[groupIndex];
       return group ? { kind: "group" as const, value: group } : null;
     }
-    return offsetSelection(selection, offsetAmount);
+    const offsetSel = offsetSelection(selection, offsetAmount);
+    if (offsetSel.kind === "stroke") {
+      strokeMap.set(selection.value, offsetSel.value);
+    }
+    return offsetSel;
   }).filter((selection): selection is Selection => selection !== null);
-  return { selections, elements, groups };
+
+  const creationRecords: CreationRecord[] = clipboard.creationRecords
+    ? clipboard.creationRecords.map(record => {
+        if (record.kind === "element") {
+          const newId = idMap.get(record.value.id);
+          const element = elements.find(e => e.id === newId);
+          return element ? { kind: "element" as const, value: element } : null;
+        }
+        const stroke = strokeMap.get(record.value) ?? (offsetSelection({ kind: "stroke", value: record.value }, offsetAmount).value as FreehandStroke);
+        return { kind: "stroke" as const, value: stroke };
+      }).filter((rec): rec is CreationRecord => rec !== null)
+    : [
+        ...elements.map(e => ({ kind: "element" as const, value: e })),
+        ...selections.filter((s): s is Extract<Selection, { kind: "stroke" }> => s.kind === "stroke").map(s => ({ kind: "stroke" as const, value: s.value })),
+      ];
+
+  return { selections, elements, groups, creationRecords };
 }

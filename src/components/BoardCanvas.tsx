@@ -57,8 +57,14 @@ import {
 } from "@/history/history";
 import type { HistoryState, CanvasSnapshot } from "@/history/types";
 import { groupSelection, ungroupSelection, getSelectedGroups, removeElementFromGroups } from "@/editor/grouping";
-import { copyToClipboard, offsetClipboard } from "@/clipboard/clipboard";
-import type { ClipboardState } from "@/clipboard/types";
+import {
+  copyToClipboard,
+  offsetClipboard,
+  createDuplicateState,
+  resetDuplicateState,
+  areSelectionsEqual,
+} from "@/clipboard/clipboard";
+import type { ClipboardState, DuplicateState } from "@/clipboard/types";
 import {
   isItemLocked,
   isAnySelectionLocked,
@@ -112,6 +118,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const clipboardRef = useRef<ClipboardState>({ item: null });
+  const duplicateStateRef = useRef<DuplicateState>(createDuplicateState());
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
   const activeCircleRef = useRef<CircleElement | null>(null);
@@ -248,6 +255,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (snapshot) {
       historyRef.current = newHistory;
       applySnapshot(snapshot);
+      resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
     }
   };
@@ -258,6 +266,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (snapshot) {
       historyRef.current = newHistory;
       applySnapshot(snapshot);
+      resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
     }
   };
@@ -308,6 +317,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (setSelectionLock(selectionRef.current, elementsRef.current, true)) {
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
       notifyLayerChange();
     }
   };
@@ -316,6 +326,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (setSelectionLock(selectionRef.current, elementsRef.current, false)) {
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
       notifyLayerChange();
     }
   };
@@ -326,6 +337,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (setSelectionLock(targets, elementsRef.current, !isLocked)) {
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
       notifyLayerChange();
     }
   };
@@ -336,6 +348,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current = [{ kind: "group", value: group }];
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
       notifyLayerChange();
     }
   };
@@ -349,6 +362,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         .map(element => ({ kind: "element", value: element }));
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
       notifyLayerChange();
     }
   };
@@ -360,30 +374,43 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
     drawCanvas();
     addHistory();
+    resetDuplicateState(duplicateStateRef.current);
     notifyLayerChange();
   };
 
   const handleCopy = () => {
-    clipboardRef.current = copyToClipboard(selectionRef.current, elementsRef.current, groupsRef.current);
+    clipboardRef.current = copyToClipboard(selectionRef.current, elementsRef.current, groupsRef.current, creationOrderRef.current);
+    resetDuplicateState(duplicateStateRef.current);
     notifyClipboardChange();
   };
 
   const handlePaste = () => {
     if (!clipboardRef.current.item) return;
-    const { selections, elements, groups } = offsetClipboard(clipboardRef.current.item, 20);
 
-    for (const item of elements) {
-      elementsRef.current.push(item);
-      creationOrderRef.current.push({ kind: "element", value: item });
+    const isContinuing = areSelectionsEqual(duplicateStateRef.current.lastSelectionSnapshot, selectionRef.current);
+    if (!isContinuing) {
+      duplicateStateRef.current.sequenceCount = 1;
+    } else {
+      duplicateStateRef.current.sequenceCount += 1;
     }
-    for (const group of groups) groupsRef.current.push(group);
-    for (const sel of selections) {
-      if (sel.kind === "stroke") {
-        strokesRef.current.push(sel.value);
-        creationOrderRef.current.push({ kind: "stroke", value: sel.value });
+
+    const offsetAmount = 20 * duplicateStateRef.current.sequenceCount;
+    const { selections, groups, creationRecords } = offsetClipboard(clipboardRef.current.item, offsetAmount);
+
+    for (const record of creationRecords) {
+      if (record.kind === "element") {
+        elementsRef.current.push(record.value);
+        creationOrderRef.current.push({ kind: "element", value: record.value });
+      } else if (record.kind === "stroke") {
+        strokesRef.current.push(record.value);
+        creationOrderRef.current.push({ kind: "stroke", value: record.value });
       }
     }
+    for (const group of groups) {
+      groupsRef.current.push(group);
+    }
     selectionRef.current = selections;
+    duplicateStateRef.current.lastSelectionSnapshot = selections;
     
     drawCanvas();
     addHistory();
@@ -394,24 +421,32 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const handleDuplicate = () => {
     if (selectionRef.current.length === 0) return;
     
-    // Create temporary clipboard state for duplication
-    const tempClipboard = copyToClipboard(selectionRef.current, elementsRef.current, groupsRef.current);
+    const isContinuing = areSelectionsEqual(duplicateStateRef.current.lastSelectionSnapshot, selectionRef.current);
+    if (!isContinuing) {
+      duplicateStateRef.current.sequenceCount = 1;
+    } else {
+      duplicateStateRef.current.sequenceCount += 1;
+    }
+
+    const tempClipboard = copyToClipboard(selectionRef.current, elementsRef.current, groupsRef.current, creationOrderRef.current);
     if (!tempClipboard.item) return;
     
-    const { selections, elements, groups } = offsetClipboard(tempClipboard.item, 20);
+    const { selections, groups, creationRecords } = offsetClipboard(tempClipboard.item, 20);
 
-    for (const item of elements) {
-      elementsRef.current.push(item);
-      creationOrderRef.current.push({ kind: "element", value: item });
-    }
-    for (const group of groups) groupsRef.current.push(group);
-    for (const sel of selections) {
-      if (sel.kind === "stroke") {
-        strokesRef.current.push(sel.value);
-        creationOrderRef.current.push({ kind: "stroke", value: sel.value });
+    for (const record of creationRecords) {
+      if (record.kind === "element") {
+        elementsRef.current.push(record.value);
+        creationOrderRef.current.push({ kind: "element", value: record.value });
+      } else if (record.kind === "stroke") {
+        strokesRef.current.push(record.value);
+        creationOrderRef.current.push({ kind: "stroke", value: record.value });
       }
     }
+    for (const group of groups) {
+      groupsRef.current.push(group);
+    }
     selectionRef.current = selections;
+    duplicateStateRef.current.lastSelectionSnapshot = selections;
     
     drawCanvas();
     addHistory();
@@ -436,11 +471,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (moved) {
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
     }
   };
 
   const handleSetSelection = (selections: SelectionSet) => {
     selectionRef.current = [...selections];
+    resetDuplicateState(duplicateStateRef.current);
     drawCanvas();
     notifyLayerChange();
   };
@@ -517,6 +554,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (changed) {
       drawCanvas();
       addHistory();
+      resetDuplicateState(duplicateStateRef.current);
       notifyLayerChange();
     }
   };
@@ -715,6 +753,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         selectionRef.current = selectionIncludes(currentSelection, clickedSelection)
           ? currentSelection.filter(selection => !selectionIncludes([selection], clickedSelection))
           : [...currentSelection, clickedSelection];
+        resetDuplicateState(duplicateStateRef.current);
         notifyLayerChange();
         dragRef.current = null;
         multiDragRef.current = null;
@@ -726,6 +765,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
         if (!wasSelected) {
           selectionRef.current = [clickedSelection];
+          resetDuplicateState(duplicateStateRef.current);
           notifyLayerChange();
         }
 
@@ -757,6 +797,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         event.currentTarget.setPointerCapture(event.pointerId);
         dragRef.current = null;
         multiDragRef.current = null;
+        resetDuplicateState(duplicateStateRef.current);
       }
 
       drawCanvas();
@@ -868,6 +909,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       elementsRef.current,
       null, selectionRef.current,
       viewportRef.current, canvasSettings);
+    resetDuplicateState(duplicateStateRef.current);
     addHistory();
   };
 
@@ -994,6 +1036,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     keyboardMovementPendingRef.current = false;
+    resetDuplicateState(duplicateStateRef.current);
     addHistory();
   };
 
@@ -1503,6 +1546,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           null, selectionRef.current,
           viewportRef.current, canvasSettings);
         if (rotation.moved) {
+          resetDuplicateState(duplicateStateRef.current);
           addHistory();
         }
         return;
@@ -1515,7 +1559,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         }
         if (!multiDrag.moved) {
           selectionRef.current = [multiDrag.clicked];
+          resetDuplicateState(duplicateStateRef.current);
           notifyLayerChange();
+        } else {
+          resetDuplicateState(duplicateStateRef.current);
         }
         multiDragRef.current = null;
         dragRef.current = null;
@@ -1543,6 +1590,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         elementsRef.current,
         null, selectionRef.current,
         viewportRef.current, canvasSettings);
+      resetDuplicateState(duplicateStateRef.current);
       addHistory();
       return;
     }
@@ -1616,6 +1664,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         elementsRef.current,
         null, selectionRef.current,
         viewportRef.current, canvasSettings);
+      resetDuplicateState(duplicateStateRef.current);
       addHistory();
       return;
     }
