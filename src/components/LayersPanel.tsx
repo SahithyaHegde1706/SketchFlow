@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import type { CreationRecord, Group, SelectionSet, WhiteboardElement, Selection } from "@/types/canvas";
 import type { LayerOperation } from "@/editor/layering";
+import { isItemLocked } from "@/editor/locking";
 
 type LayersPanelProps = {
   isOpen: boolean;
@@ -11,6 +12,7 @@ type LayersPanelProps = {
   onSelect: (selections: SelectionSet) => void;
   onDelete: () => void;
   onLayerOperation: (op: LayerOperation) => void;
+  onToggleLock?: (selection: Selection) => void;
 };
 
 type LayerNode = {
@@ -18,6 +20,7 @@ type LayerNode = {
   type: "group" | "element" | "stroke";
   label: string;
   isSelected: boolean;
+  isLocked?: boolean;
   isExpanded?: boolean;
   children?: LayerNode[];
   record?: CreationRecord;
@@ -46,9 +49,15 @@ export function LayersPanel({
   selections,
   onSelect,
   onDelete,
-  onLayerOperation
+  onLayerOperation,
+  onToggleLock,
 }: LayersPanelProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  const elements = useMemo(
+    () => records.filter((r): r is Extract<CreationRecord, { kind: "element" }> => r.kind === "element").map(r => r.value),
+    [records]
+  );
 
   const nodes = useMemo(() => {
     const emittedGroups = new Set<string>();
@@ -66,6 +75,7 @@ export function LayersPanel({
             emittedGroups.add(group.id);
             const isGroupSelected = selections.some(s => s.kind === "group" && s.value.id === group.id);
             const isExpanded = expandedGroups.has(group.id);
+            const isGroupLocked = isItemLocked(group, elements);
             
             // Gather children
             const children: LayerNode[] = [];
@@ -78,6 +88,7 @@ export function LayersPanel({
                   type: "element",
                   label: getElementLabel(childRecord.value),
                   isSelected: selections.some(s => s.kind === "element" && s.value.id === childRecord.value.id),
+                  isLocked: Boolean(childRecord.value.locked),
                   record: childRecord,
                 });
               }
@@ -88,6 +99,7 @@ export function LayersPanel({
               type: "group",
               label: "Group",
               isSelected: isGroupSelected,
+              isLocked: isGroupLocked,
               isExpanded,
               children,
               group,
@@ -99,6 +111,7 @@ export function LayersPanel({
             type: "element",
             label: getElementLabel(record.value),
             isSelected: selections.some(s => s.kind === "element" && s.value.id === record.value.id),
+            isLocked: Boolean(record.value.locked),
             record,
           });
         }
@@ -108,13 +121,14 @@ export function LayersPanel({
           type: "stroke",
           label: "Freehand",
           isSelected: selections.some(s => s.kind === "stroke" && s.value === record.value),
+          isLocked: Boolean(record.value.locked),
           record,
         });
       }
     }
     
     return result;
-  }, [records, groups, selections, expandedGroups]);
+  }, [records, groups, selections, expandedGroups, elements]);
 
   const toggleGroup = (groupId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -146,6 +160,15 @@ export function LayersPanel({
     } else {
       onSelect([newSelection]);
     }
+  };
+
+  const handleToggleLockNode = (node: LayerNode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const selection = {
+      kind: node.type as Selection["kind"],
+      value: (node.group || node.record?.value)!
+    } as Selection;
+    onToggleLock?.(selection);
   };
 
   if (!isOpen) return null;
@@ -186,7 +209,7 @@ export function LayersPanel({
 
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
         {nodes.map(node => (
-          <LayerNodeView key={node.id} node={node} onToggle={toggleGroup} onSelect={handleSelectNode} />
+          <LayerNodeView key={node.id} node={node} onToggle={toggleGroup} onSelect={handleSelectNode} onToggleLock={handleToggleLockNode} />
         ))}
         {nodes.length === 0 && (
           <div className="text-center text-xs text-slate-400 mt-8">No layers</div>
@@ -196,11 +219,23 @@ export function LayersPanel({
   );
 }
 
-function LayerNodeView({ node, onToggle, onSelect, depth = 0 }: { node: LayerNode, onToggle: (id: string, e: React.MouseEvent) => void, onSelect: (node: LayerNode, e: React.MouseEvent) => void, depth?: number }) {
+function LayerNodeView({
+  node,
+  onToggle,
+  onSelect,
+  onToggleLock,
+  depth = 0,
+}: {
+  node: LayerNode;
+  onToggle: (id: string, e: React.MouseEvent) => void;
+  onSelect: (node: LayerNode, e: React.MouseEvent) => void;
+  onToggleLock?: (node: LayerNode, e: React.MouseEvent) => void;
+  depth?: number;
+}) {
   return (
     <>
       <div 
-        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm select-none
+        className={`group flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm select-none
           ${node.isSelected ? 'bg-teal-50 text-teal-900 font-medium' : 'hover:bg-slate-50 text-slate-700'}
         `}
         style={{ paddingLeft: `${0.5 + depth * 1.25}rem` }}
@@ -224,11 +259,28 @@ function LayerNodeView({ node, onToggle, onSelect, depth = 0 }: { node: LayerNod
           {node.type === "element" && node.label.startsWith("Arrow") && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>}
           {node.type === "element" && node.label.startsWith("Text") && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>}
         </span>
-        <span className="truncate">{node.label}</span>
+        <span className="truncate flex-1">{node.label}</span>
+
+        <button
+          type="button"
+          onClick={(e) => onToggleLock?.(node, e)}
+          title={node.isLocked ? "Unlock layer" : "Lock layer"}
+          aria-label={node.isLocked ? "Unlock layer" : "Lock layer"}
+          className={`p-1 rounded transition shrink-0 ${
+            node.isLocked
+              ? "text-red-500 hover:bg-red-50"
+              : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d={node.isLocked ? "M7 11V7a5 5 0 0 1 10 0v4" : "M7 11V7a5 5 0 0 1 9.9-1"} />
+          </svg>
+        </button>
       </div>
       
       {node.isExpanded && node.children?.map(child => (
-        <LayerNodeView key={child.id} node={child} onToggle={onToggle} onSelect={onSelect} depth={depth + 1} />
+        <LayerNodeView key={child.id} node={child} onToggle={onToggle} onSelect={onSelect} onToggleLock={onToggleLock} depth={depth + 1} />
       ))}
     </>
   );

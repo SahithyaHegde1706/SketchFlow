@@ -2,6 +2,7 @@ import type { Bounds, Point, ResizeHandle, Selection, SelectionSet, WhiteboardEl
 import { getBounds, getStrokeBounds, rotatePoint } from "./geometry";
 import { getElementCenter } from "@/editor/rotation";
 import { getTextBounds } from "./text";
+import { isItemLocked, isAnySelectionLocked } from "@/editor/locking";
 
 function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
   let unrotatedBounds: Bounds;
@@ -110,11 +111,12 @@ function drawSelectionBounds(
   bounds: Bounds,
   drawHandles: boolean,
   drawRotationHandle: boolean,
+  isLocked: boolean = false,
 ) {
   const padding = 6;
 
   context.save();
-  context.strokeStyle = "#0d9488";
+  context.strokeStyle = isLocked ? "#ef4444" : "#0d9488";
   context.lineWidth = 2;
   context.setLineDash([5, 4]);
 
@@ -130,7 +132,7 @@ function drawSelectionBounds(
   context.setLineDash([]);
   context.fillStyle = "#e5e7eb";
 
-  if (drawRotationHandle) {
+  if (drawRotationHandle && !isLocked) {
     const handleSize = 10;
     const centerX = left + width / 2;
     const rotateHandleY = top - 24;
@@ -146,7 +148,7 @@ function drawSelectionBounds(
     context.stroke();
   }
 
-  if (drawHandles) {
+  if (drawHandles && !isLocked) {
     const handleSize = 10;
     const right = left + width;
     const bottom = top + height;
@@ -166,6 +168,25 @@ function drawSelectionBounds(
     }
   }
 
+  if (isLocked) {
+    const badgeX = left + width / 2;
+    const badgeY = top - 14;
+    context.save();
+    context.fillStyle = "#ef4444";
+    context.beginPath();
+    context.arc(badgeX, badgeY, 10, 0, Math.PI * 2);
+    context.fill();
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(badgeX - 4, badgeY - 1, 8, 6);
+    context.strokeStyle = "#ffffff";
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.arc(badgeX, badgeY - 2, 3, Math.PI, 0);
+    context.stroke();
+    context.restore();
+  }
+
   context.restore();
 }
 
@@ -180,14 +201,30 @@ export function drawSelection(
   }
 
   if (selections.length === 1) {
-    drawSelectionBounds(context, getSelectionBounds(context, selections[0]!, elements), selections[0]!.kind !== "group", true);
+    const locked = isItemLocked(selections[0]!, elements);
+    drawSelectionBounds(
+      context,
+      getSelectionBounds(context, selections[0]!, elements),
+      selections[0]!.kind !== "group",
+      true,
+      locked,
+    );
     return;
   }
 
+  const anyLocked = isAnySelectionLocked(selections, elements);
+
   for (const item of selections) {
-    drawSelectionBounds(context, getSelectionBounds(context, item, elements), false, false);
+    const itemLocked = isItemLocked(item, elements);
+    drawSelectionBounds(context, getSelectionBounds(context, item, elements), false, false, itemLocked);
   }
-  drawSelectionBounds(context, getCombinedSelectionBounds(context, selections, elements), false, true);
+  drawSelectionBounds(
+    context,
+    getCombinedSelectionBounds(context, selections, elements),
+    false,
+    !anyLocked,
+    anyLocked,
+  );
 }
 
 export function findResizeHandleAtPoint(

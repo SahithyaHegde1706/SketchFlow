@@ -3,7 +3,7 @@ export type Point = {
   y: number;
 };
 
-export type FreehandStroke = Point[];
+export type FreehandStroke = Point[] & { locked?: boolean };
 
 export type RectangleElement = {
   id: string;
@@ -16,6 +16,7 @@ export type RectangleElement = {
   strokeWidth: number;
   rotation?: number;
   fillColor?: string | null;
+  locked?: boolean;
 };
 
 export type CircleElement = {
@@ -29,6 +30,7 @@ export type CircleElement = {
   strokeWidth: number;
   rotation?: number;
   fillColor?: string | null;
+  locked?: boolean;
 };
 
 export type ArrowElement = {
@@ -41,6 +43,7 @@ export type ArrowElement = {
   strokeColor: string;
   strokeWidth: number;
   rotation?: number;
+  locked?: boolean;
 };
 
 export type LineElement = {
@@ -53,6 +56,7 @@ export type LineElement = {
   strokeColor: string;
   strokeWidth: number;
   rotation?: number;
+  locked?: boolean;
 };
 
 export type RoundedRectangleElement = {
@@ -67,6 +71,7 @@ export type RoundedRectangleElement = {
   strokeWidth: number;
   fillColor?: string | null;
   rotation?: number;
+  locked?: boolean;
 };
 
 export type TextElement = {
@@ -84,6 +89,7 @@ export type TextElement = {
   textDecoration?: "none" | "underline";
   textAlign?: "left" | "center" | "right";
   lineHeight?: number;
+  locked?: boolean;
 };
 
 export type WhiteboardElement =
@@ -97,6 +103,7 @@ export type WhiteboardElement =
 export type Group = {
   id: string;
   elementIds: string[];
+  locked?: boolean;
 };
 
 export type Selection =

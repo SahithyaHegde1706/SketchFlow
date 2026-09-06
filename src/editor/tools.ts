@@ -72,7 +72,13 @@ export function cloneSelectionValue(selection: Selection): FreehandStroke | Whit
     return { ...selection.value, elementIds: [...selection.value.elementIds] };
   }
 
-  return selection.kind === "stroke"
-    ? selection.value.map((point) => ({ ...point }))
-    : { ...selection.value };
+  if (selection.kind === "stroke") {
+    const strokeClone = selection.value.map((point) => ({ ...point })) as FreehandStroke;
+    if (selection.value.locked) {
+      strokeClone.locked = true;
+    }
+    return strokeClone;
+  }
+
+  return { ...selection.value };
 }

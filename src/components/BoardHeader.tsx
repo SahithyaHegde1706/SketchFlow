@@ -2,6 +2,7 @@ import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 import { LayerControls } from "@/components/LayerControls";
 import { GroupControls } from "@/components/GroupControls";
 import { AlignControls } from "@/components/AlignControls";
+import { LockControls } from "@/components/LockControls";
 import type { AlignOperation } from "@/types/canvas";
 
 type BoardHeaderProps = {
@@ -18,6 +19,10 @@ type BoardHeaderProps = {
   canAlign?: boolean;
   canDistribute?: boolean;
   onAlign?: (operation: AlignOperation) => void;
+  canLock?: boolean;
+  canUnlock?: boolean;
+  onLock?: () => void;
+  onUnlock?: () => void;
   activePanel: "layers" | "properties" | null;
   onTogglePanel: (panel: "layers" | "properties") => void;
 };
@@ -38,6 +43,10 @@ export function BoardHeader({
   canAlign = false,
   canDistribute = false,
   onAlign,
+  canLock = false,
+  canUnlock = false,
+  onLock,
+  onUnlock,
   activePanel,
   onTogglePanel,
 }: BoardHeaderProps) {
@@ -62,6 +71,13 @@ export function BoardHeader({
         </span>
 
         <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block" />
+
+        <LockControls
+          canLock={canLock}
+          canUnlock={canUnlock}
+          onLock={onLock || (() => {})}
+          onUnlock={onUnlock || (() => {})}
+        />
 
         <GroupControls
           canGroup={canGroup}

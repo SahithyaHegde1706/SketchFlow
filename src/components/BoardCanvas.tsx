@@ -59,6 +59,12 @@ import type { HistoryState, CanvasSnapshot } from "@/history/types";
 import { groupSelection, ungroupSelection, getSelectedGroups, removeElementFromGroups } from "@/editor/grouping";
 import { copyToClipboard, offsetClipboard } from "@/clipboard/clipboard";
 import type { ClipboardState } from "@/clipboard/types";
+import {
+  isItemLocked,
+  isAnySelectionLocked,
+  getLockAvailability,
+  setSelectionLock,
+} from "@/editor/locking";
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -69,6 +75,7 @@ type BoardCanvasProps = {
   onLayerChange?: (availability: LayerAvailability) => void;
   onGroupAvailabilityChange?: (canGroup: boolean, canUngroup: boolean) => void;
   onAlignAvailabilityChange?: (canAlign: boolean, canDistribute: boolean) => void;
+  onLockAvailabilityChange?: (canLock: boolean, canUnlock: boolean) => void;
   onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
 };
 
@@ -85,10 +92,13 @@ export type BoardCanvasHandle = {
   group: () => void;
   ungroup: () => void;
   align: (operation: AlignOperation) => void;
+  lock: () => void;
+  unlock: () => void;
+  toggleLock: (target?: Selection) => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onDocumentChange }, ref) => {
+  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onLockAvailabilityChange, onDocumentChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -289,16 +299,42 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     
     onGroupAvailabilityChange?.(canGroup, canUngroup);
     onAlignAvailabilityChange?.(selectionRef.current.length >= 2, selectionRef.current.length >= 3);
+
+    const { canLock, canUnlock } = getLockAvailability(selectionRef.current, elementsRef.current);
+    onLockAvailabilityChange?.(canLock, canUnlock);
+  };
+
+  const handleLock = () => {
+    if (setSelectionLock(selectionRef.current, elementsRef.current, true)) {
+      drawCanvas();
+      addHistory();
+      notifyLayerChange();
+    }
+  };
+
+  const handleUnlock = () => {
+    if (setSelectionLock(selectionRef.current, elementsRef.current, false)) {
+      drawCanvas();
+      addHistory();
+      notifyLayerChange();
+    }
+  };
+
+  const handleToggleLock = (target?: Selection) => {
+    const targets = target ? [target] : selectionRef.current;
+    const isLocked = isAnySelectionLocked(targets, elementsRef.current);
+    if (setSelectionLock(targets, elementsRef.current, !isLocked)) {
+      drawCanvas();
+      addHistory();
+      notifyLayerChange();
+    }
   };
 
   const handleGroup = () => {
     const group = groupSelection(selectionRef.current, elementsRef.current, groupsRef.current);
     if (group) {
       selectionRef.current = [{ kind: "group", value: group }];
-      renderCanvas(
-        canvasRef.current, strokesRef.current, elementsRef.current,
-        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-        selectionRef.current, viewportRef.current, canvasSettings);
+      drawCanvas();
       addHistory();
       notifyLayerChange();
     }
@@ -311,10 +347,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         .map(id => elementsRef.current.find(e => e.id === id))
         .filter((e): e is WhiteboardElement => !!e)
         .map(element => ({ kind: "element", value: element }));
-      renderCanvas(
-        canvasRef.current, strokesRef.current, elementsRef.current,
-        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-        selectionRef.current, viewportRef.current, canvasSettings);
+      drawCanvas();
       addHistory();
       notifyLayerChange();
     }
@@ -325,12 +358,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       return;
     }
 
-    renderCanvas(
-      canvasRef.current,
-      strokesRef.current,
-      elementsRef.current,
-      null, selectionRef.current,
-      viewportRef.current, canvasSettings);
+    drawCanvas();
     addHistory();
     notifyLayerChange();
   };
@@ -357,10 +385,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
     selectionRef.current = selections;
     
-    renderCanvas(
-      canvasRef.current, strokesRef.current, elementsRef.current,
-      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-      selectionRef.current, viewportRef.current, canvasSettings);
+    drawCanvas();
     addHistory();
     notifyClipboardChange();
     notifyLayerChange();
@@ -388,10 +413,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
     selectionRef.current = selections;
     
-    renderCanvas(
-      canvasRef.current, strokesRef.current, elementsRef.current,
-      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-      selectionRef.current, viewportRef.current, canvasSettings);
+    drawCanvas();
     addHistory();
     notifyClipboardChange();
     notifyLayerChange();
@@ -399,6 +421,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const handleAlign = async (operation: AlignOperation) => {
     if (selectionRef.current.length < 2) return;
+    if (isAnySelectionLocked(selectionRef.current, elementsRef.current)) return;
+
     const context = canvasRef.current?.getContext("2d");
     if (!context) return;
     
@@ -410,26 +434,21 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     const moved = alignSelection(context, selectionRef.current, originals, operation, elementsRef.current);
     
     if (moved) {
-      renderCanvas(
-        canvasRef.current, strokesRef.current, elementsRef.current,
-        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-        selectionRef.current, viewportRef.current, canvasSettings);
+      drawCanvas();
       addHistory();
     }
   };
 
   const handleSetSelection = (selections: SelectionSet) => {
     selectionRef.current = [...selections];
-    renderCanvas(
-      canvasRef.current, strokesRef.current, elementsRef.current,
-      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-      selectionRef.current, viewportRef.current, canvasSettings);
+    drawCanvas();
     notifyLayerChange();
   };
 
   const handleDeleteSelection = () => {
-    if (selectionRef.current.length > 0) {
-      for (const selection of selectionRef.current) {
+    const toDelete = selectionRef.current.filter(sel => !isItemLocked(sel, elementsRef.current));
+    if (toDelete.length > 0) {
+      for (const selection of toDelete) {
         if (selection.kind === "stroke") {
           removeByReference(strokesRef.current, selection.value);
         } else if (selection.kind === "group") {
@@ -445,12 +464,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           removeElementFromGroups(selection.value.id, groupsRef.current);
         }
       }
-      creationOrderRef.current = creationOrderRef.current.filter(record => !selectionIncludes(selectionRef.current, record as Selection));
-      selectionRef.current = [];
-      renderCanvas(
-        canvasRef.current, strokesRef.current, elementsRef.current,
-        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-        selectionRef.current, viewportRef.current, canvasSettings);
+      creationOrderRef.current = creationOrderRef.current.filter(record => !selectionIncludes(toDelete, record as Selection));
+      selectionRef.current = selectionRef.current.filter(sel => isItemLocked(sel, elementsRef.current));
+      drawCanvas();
       addHistory();
       notifyLayerChange();
     }
@@ -458,6 +474,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const handleUpdateProperties = (updates: Partial<WhiteboardElement>) => {
     if (selectionRef.current.length === 0) return;
+    if (isAnySelectionLocked(selectionRef.current, elementsRef.current)) return;
     
     const applySafeUpdates = (element: WhiteboardElement, updates: Partial<WhiteboardElement>) => {
       const safeUpdates = { ...updates } as Record<string, unknown>;
@@ -480,24 +497,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     let changed = false;
     for (const selection of selectionRef.current) {
       if (selection.kind === "element") {
-        applySafeUpdates(selection.value, updates);
-        changed = true;
+        if (!isItemLocked(selection.value, elementsRef.current)) {
+          applySafeUpdates(selection.value, updates);
+          changed = true;
+        }
       } else if (selection.kind === "group") {
-        for (const id of selection.value.elementIds) {
-          const element = elementsRef.current.find(e => e.id === id);
-          if (element) {
-            applySafeUpdates(element, updates);
-            changed = true;
+        if (!isItemLocked(selection.value, elementsRef.current)) {
+          for (const id of selection.value.elementIds) {
+            const element = elementsRef.current.find(e => e.id === id);
+            if (element && !element.locked) {
+              applySafeUpdates(element, updates);
+              changed = true;
+            }
           }
         }
       }
     }
     
     if (changed) {
-      renderCanvas(
-        canvasRef.current, strokesRef.current, elementsRef.current,
-        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-        selectionRef.current, viewportRef.current, canvasSettings);
+      drawCanvas();
       addHistory();
       notifyLayerChange();
     }
@@ -516,6 +534,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     group: handleGroup,
     ungroup: handleUngroup,
     align: handleAlign,
+    lock: handleLock,
+    unlock: handleUnlock,
+    toggleLock: handleToggleLock,
   }));
 
   useEffect(() => {
@@ -658,34 +679,38 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       }
 
       if (clickedHandle === "rotate" && currentSelection.length > 0) {
-        // Find selection bounds center to use as the orbit center
-        const bounds = getCombinedSelectionBounds(context!, currentSelection, elementsRef.current);
-        const centerX = (bounds.left + bounds.right) / 2;
-        const centerY = (bounds.top + bounds.bottom) / 2;
-        
-        const flatSelections = flattenSelection(currentSelection);
-        rotationRef.current = {
-          selections: flatSelections,
-          originals: flatSelections.map(selection => cloneSelectionValue(selection)),
-          originalElements: elementsRef.current.map(e => ({ ...e })),
-          centerX,
-          centerY,
-          initialPointerAngle: Math.atan2(point.y - centerY, point.x - centerX),
-          moved: false,
-        };
-        activePointerIdRef.current = event.pointerId;
-        event.currentTarget.setPointerCapture(event.pointerId);
+        if (!isAnySelectionLocked(currentSelection, elementsRef.current)) {
+          // Find selection bounds center to use as the orbit center
+          const bounds = getCombinedSelectionBounds(context!, currentSelection, elementsRef.current);
+          const centerX = (bounds.left + bounds.right) / 2;
+          const centerY = (bounds.top + bounds.bottom) / 2;
+          
+          const flatSelections = flattenSelection(currentSelection);
+          rotationRef.current = {
+            selections: flatSelections,
+            originals: flatSelections.map(selection => cloneSelectionValue(selection)),
+            originalElements: elementsRef.current.map(e => ({ ...e })),
+            centerX,
+            centerY,
+            initialPointerAngle: Math.atan2(point.y - centerY, point.x - centerX),
+            moved: false,
+          };
+          activePointerIdRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
       } else if (clickedHandle && currentSelection.length === 1) {
         const selection = currentSelection[0]!;
-        dragRef.current = {
-          selection,
-          pointerStart: point,
-          original: cloneSelectionValue(selection),
-          type: "resize",
-          handle: clickedHandle,
-        };
-        activePointerIdRef.current = event.pointerId;
-        event.currentTarget.setPointerCapture(event.pointerId);
+        if (!isItemLocked(selection, elementsRef.current)) {
+          dragRef.current = {
+            selection,
+            pointerStart: point,
+            original: cloneSelectionValue(selection),
+            type: "resize",
+            handle: clickedHandle,
+          };
+          activePointerIdRef.current = event.pointerId;
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }
       } else if (event.shiftKey && clickedSelection) {
         selectionRef.current = selectionIncludes(currentSelection, clickedSelection)
           ? currentSelection.filter(selection => !selectionIncludes([selection], clickedSelection))
@@ -696,34 +721,27 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       } else if (clickedSelection) {
         const wasSelected = selectionIncludes(currentSelection, clickedSelection);
         const activeSelection = wasSelected ? currentSelection : [clickedSelection];
-        const isGroupOrMulti = activeSelection.length > 1 || activeSelection.some((s) => s.kind === "group");
+        const flatSelections = flattenSelection(activeSelection);
+        const movableSelections = flatSelections.filter(sel => !isItemLocked(sel, elementsRef.current));
 
-        if (isGroupOrMulti) {
-          const flatSelections = flattenSelection(activeSelection);
+        if (!wasSelected) {
+          selectionRef.current = [clickedSelection];
+          notifyLayerChange();
+        }
+
+        if (movableSelections.length > 0) {
           multiDragRef.current = {
-            selections: flatSelections,
-            originals: flatSelections.map(selection => cloneSelectionValue(selection)),
+            selections: movableSelections,
+            originals: movableSelections.map(selection => cloneSelectionValue(selection)),
             pointerStart: point,
             clicked: clickedSelection,
             moved: false,
           };
-          if (!wasSelected) {
-            selectionRef.current = [clickedSelection];
-            notifyLayerChange();
-          }
           activePointerIdRef.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
         } else {
-          selectionRef.current = [clickedSelection];
-          notifyLayerChange();
-          dragRef.current = {
-            selection: clickedSelection,
-            pointerStart: point,
-            original: cloneSelectionValue(clickedSelection),
-            type: "move",
-          };
-          activePointerIdRef.current = event.pointerId;
-          event.currentTarget.setPointerCapture(event.pointerId);
+          dragRef.current = null;
+          multiDragRef.current = null;
         }
       } else {
         // Pointer down on empty canvas space -> initialize marquee drag
@@ -952,7 +970,12 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     const flatSelections = flattenSelection(selection);
-    flatSelections.forEach(item => {
+    const movableSelections = flatSelections.filter(item => !isItemLocked(item, elementsRef.current));
+    if (movableSelections.length === 0) {
+      return false;
+    }
+
+    movableSelections.forEach(item => {
       moveSelection(item, cloneSelectionValue(item), deltaX, deltaY);
     });
     keyboardMovementPendingRef.current = true;
@@ -991,6 +1014,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handleGroup,
     handleUngroup,
     deleteSelection: handleDeleteSelection,
+    handleLock,
+    handleUnlock,
   });
   keyboardActionsRef.current = {
     addHistory,
@@ -1009,6 +1034,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handleGroup,
     handleUngroup,
     deleteSelection: handleDeleteSelection,
+    handleLock,
+    handleUnlock,
   };
 
   useEffect(() => {
@@ -1090,6 +1117,18 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         event.preventDefault();
         if (event.shiftKey) actions.handleUngroup();
         else actions.handleGroup();
+        return;
+      }
+      if (modifierKey && event.shiftKey && event.key.toLowerCase() === "l") {
+        actions.finishKeyboardMovement();
+        event.preventDefault();
+        actions.handleLock();
+        return;
+      }
+      if (modifierKey && event.shiftKey && event.key.toLowerCase() === "u") {
+        actions.finishKeyboardMovement();
+        event.preventDefault();
+        actions.handleUnlock();
         return;
       }
       if (hasShortcutModifier(event)) {
@@ -1549,6 +1588,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         : isPointOnElement(context, point, record.value);
 
       if (!isHit) {
+        continue;
+      }
+
+      if (isItemLocked(record as Selection, elementsRef.current)) {
         continue;
       }
 

@@ -1,4 +1,4 @@
-import type { Group, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { Group, Selection, SelectionSet, WhiteboardElement, FreehandStroke } from "@/types/canvas";
 import type { ClipboardState } from "./types";
 
 export function copyToClipboard(selection: SelectionSet, elements: WhiteboardElement[], groups: Group[]): ClipboardState {
@@ -32,12 +32,16 @@ export function getClipboard(state: ClipboardState) {
 export function offsetSelection(selection: Selection, offsetAmount: number = 20): Selection {
   if (selection.kind === "stroke") {
     // Strokes don't have IDs. Offset every point by offsetAmount.
+    const stroke: FreehandStroke = selection.value.map(point => ({
+      x: point.x + offsetAmount,
+      y: point.y + offsetAmount,
+    }));
+    if (selection.value.locked) {
+      stroke.locked = true;
+    }
     return {
       kind: "stroke",
-      value: selection.value.map(point => ({
-        x: point.x + offsetAmount,
-        y: point.y + offsetAmount,
-      })),
+      value: stroke,
     };
   }
 

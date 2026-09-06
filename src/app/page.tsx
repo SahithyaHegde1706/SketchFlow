@@ -28,6 +28,7 @@ export default function Home() {
   });
   const [groupAvailability, setGroupAvailability] = useState({ canGroup: false, canUngroup: false });
   const [alignAvailability, setAlignAvailability] = useState({ canAlign: false, canDistribute: false });
+  const [lockAvailability, setLockAvailability] = useState({ canLock: false, canUnlock: false });
   const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>({
     backgroundColor: "#f8fafc",
     showGrid: false,
@@ -51,6 +52,10 @@ export default function Home() {
         canAlign={alignAvailability.canAlign}
         canDistribute={alignAvailability.canDistribute}
         onAlign={(operation) => boardRef.current?.align(operation)}
+        canLock={lockAvailability.canLock}
+        canUnlock={lockAvailability.canUnlock}
+        onLock={() => boardRef.current?.lock()}
+        onUnlock={() => boardRef.current?.unlock()}
         activePanel={activePanel}
         onTogglePanel={(panel) => setActivePanel(activePanel === panel ? null : panel)}
       />
@@ -65,6 +70,7 @@ export default function Home() {
           onLayerChange={setLayerAvailability}
           onGroupAvailabilityChange={(canGroup, canUngroup) => setGroupAvailability({ canGroup, canUngroup })}
           onAlignAvailabilityChange={(canAlign, canDistribute) => setAlignAvailability({ canAlign, canDistribute })}
+          onLockAvailabilityChange={(canLock, canUnlock) => setLockAvailability({ canLock, canUnlock })}
           onDocumentChange={(records, groups, selections) => setDocumentState({ records, groups, selections })}
         />
         {activePanel && (
@@ -79,6 +85,7 @@ export default function Home() {
                 onSelect={(selections) => boardRef.current?.setSelection(selections)}
                 onDelete={() => boardRef.current?.deleteSelection()}
                 onLayerOperation={(op) => boardRef.current?.applyLayerOperation(op)}
+                onToggleLock={(target) => boardRef.current?.toggleLock(target)}
               />
             )}
             {activePanel === "properties" && (

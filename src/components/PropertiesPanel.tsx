@@ -1,4 +1,5 @@
 import type { SelectionSet, WhiteboardElement, Group, TextElement, CanvasSettings } from "@/types/canvas";
+import { isAnySelectionLocked } from "@/editor/locking";
 
 type PropertiesPanelProps = {
   selections: SelectionSet;
@@ -30,7 +31,8 @@ function getSelectedElements(selections: SelectionSet, allElements: WhiteboardEl
 
 export function PropertiesPanel({ selections, elements, canvasSettings, onUpdateProperties, onUpdateCanvasSettings }: PropertiesPanelProps) {
   const selectedElements = getSelectedElements(selections, elements);
-  
+  const isLocked = isAnySelectionLocked(selections, elements);
+
   if (selectedElements.length === 0) {
     return (
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
@@ -159,6 +161,16 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
         {title}
       </div>
 
+      {isLocked && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs font-medium text-red-700">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <span>Selection is locked. Unlock to edit.</span>
+        </div>
+      )}
+
       {(allHaveStrokeColor || allHaveStrokeWidth) && (
         <div className="space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Stroke</h3>
@@ -174,7 +186,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                   type="color" 
                   value={strokeColor !== "mixed" && strokeColor ? strokeColor : "#000000"}
                   onChange={(e) => onUpdateProperties({ strokeColor: e.target.value })}
-                  className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+                  disabled={isLocked}
+                  className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
                   title="Stroke Color"
                 />
               </div>
@@ -191,7 +204,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                 <select
                   value={strokeWidth !== "mixed" ? strokeWidth : ""}
                   onChange={(e) => onUpdateProperties({ strokeWidth: Number(e.target.value) })}
-                  className="border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                  disabled={isLocked}
+                  className="border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {strokeWidth === "mixed" && <option value="" disabled>Mixed</option>}
                   <option value="1">1</option>
@@ -217,8 +231,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                     type="color" 
                     value={fillColor !== "mixed" && fillColor !== "transparent" && fillColor !== "none" && fillColor ? fillColor : "#ffffff"}
                     onChange={(e) => onUpdateProperties({ fillColor: e.target.value })}
-                    disabled={fillColor === "transparent" || fillColor === "none"}
-                    className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isLocked || fillColor === "transparent" || fillColor === "none"}
+                    className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
                     title="Fill Color"
                   />
                   <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
@@ -226,7 +240,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                       type="checkbox"
                       checked={fillColor === "transparent" || fillColor === "none"}
                       onChange={(e) => onUpdateProperties({ fillColor: e.target.checked ? "transparent" : "#ffffff" })}
-                      className="cursor-pointer"
+                      disabled={isLocked}
+                      className="cursor-pointer disabled:cursor-not-allowed"
                     />
                     None
                   </label>
@@ -254,7 +269,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                       const val = parseInt(e.target.value);
                       if (!isNaN(val) && val >= 0) onUpdateProperties({ radius: val });
                     }}
-                    className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                    disabled={isLocked}
+                    className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
                   />
                   <span className="text-xs text-slate-500">px</span>
                 </div>
@@ -276,7 +292,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
               <textarea
                 value={textContent || ""}
                 onChange={(e) => onUpdateProperties({ text: e.target.value })}
-                className="w-full border border-slate-200 rounded p-2 text-sm text-slate-700 min-h-[60px] resize-y focus:outline-none focus:border-teal-400"
+                disabled={isLocked}
+                className="w-full border border-slate-200 rounded p-2 text-sm text-slate-700 min-h-[60px] resize-y focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
                 placeholder="Empty text"
               />
             )}
@@ -295,7 +312,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                   const val = parseInt(e.target.value);
                   if (!isNaN(val) && val >= 8) onUpdateProperties({ fontSize: val });
                 }}
-                className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                disabled={isLocked}
+                className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
               />
               <span className="text-xs text-slate-500">px</span>
             </div>
@@ -307,7 +325,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
               <select
                 value={fontFamily !== "mixed" ? fontFamily : ""}
                 onChange={(e) => onUpdateProperties({ fontFamily: e.target.value })}
-                className="w-32 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                disabled={isLocked}
+                className="w-32 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {fontFamily === "mixed" && <option value="" disabled>Mixed</option>}
                 <option value="Arial">Arial</option>
@@ -326,21 +345,24 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
               <button
                 title="Bold"
                 onClick={() => onUpdateProperties({ fontWeight: fontWeight === "bold" ? "normal" : "bold" })}
-                className={`w-7 h-7 flex items-center justify-center rounded font-bold ${fontWeight === "bold" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+                disabled={isLocked}
+                className={`w-7 h-7 flex items-center justify-center rounded font-bold disabled:opacity-40 disabled:cursor-not-allowed ${fontWeight === "bold" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
               >
                 B
               </button>
               <button
                 title="Italic"
                 onClick={() => onUpdateProperties({ fontStyle: fontStyle === "italic" ? "normal" : "italic" })}
-                className={`w-7 h-7 flex items-center justify-center rounded italic ${fontStyle === "italic" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+                disabled={isLocked}
+                className={`w-7 h-7 flex items-center justify-center rounded italic disabled:opacity-40 disabled:cursor-not-allowed ${fontStyle === "italic" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
               >
                 I
               </button>
               <button
                 title="Underline"
                 onClick={() => onUpdateProperties({ textDecoration: textDecoration === "underline" ? "none" : "underline" })}
-                className={`w-7 h-7 flex items-center justify-center rounded underline ${textDecoration === "underline" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+                disabled={isLocked}
+                className={`w-7 h-7 flex items-center justify-center rounded underline disabled:opacity-40 disabled:cursor-not-allowed ${textDecoration === "underline" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
               >
                 U
               </button>
@@ -353,21 +375,24 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
               <button
                 title="Left Align"
                 onClick={() => onUpdateProperties({ textAlign: "left" })}
-                className={`w-7 h-7 flex items-center justify-center rounded ${textAlign === "left" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+                disabled={isLocked}
+                className={`w-7 h-7 flex items-center justify-center rounded disabled:opacity-40 disabled:cursor-not-allowed ${textAlign === "left" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="15" y2="12"></line><line x1="3" y1="18" x2="19" y2="18"></line></svg>
               </button>
               <button
                 title="Center Align"
                 onClick={() => onUpdateProperties({ textAlign: "center" })}
-                className={`w-7 h-7 flex items-center justify-center rounded ${textAlign === "center" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+                disabled={isLocked}
+                className={`w-7 h-7 flex items-center justify-center rounded disabled:opacity-40 disabled:cursor-not-allowed ${textAlign === "center" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="5" y1="18" x2="19" y2="18"></line></svg>
               </button>
               <button
                 title="Right Align"
                 onClick={() => onUpdateProperties({ textAlign: "right" })}
-                className={`w-7 h-7 flex items-center justify-center rounded ${textAlign === "right" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
+                disabled={isLocked}
+                className={`w-7 h-7 flex items-center justify-center rounded disabled:opacity-40 disabled:cursor-not-allowed ${textAlign === "right" ? "bg-teal-100 text-teal-800" : "hover:bg-slate-100 text-slate-700"}`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="9" y1="12" x2="21" y2="12"></line><line x1="5" y1="18" x2="21" y2="18"></line></svg>
               </button>
@@ -380,7 +405,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
               <select
                 value={lineHeight !== "mixed" ? lineHeight : ""}
                 onChange={(e) => onUpdateProperties({ lineHeight: Number(e.target.value) })}
-                className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+                disabled={isLocked}
+                className="w-16 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {lineHeight === "mixed" && <option value="" disabled>Mixed</option>}
                 <option value="1">1.0</option>
@@ -409,7 +435,8 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                   onUpdateProperties({ rotation: deg * (Math.PI / 180) });
                 }
               }}
-              className="w-20 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+              disabled={isLocked}
+              className="w-20 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
             />
             <span className="text-xs text-slate-500">°</span>
           </div>
