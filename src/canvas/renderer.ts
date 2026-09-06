@@ -1,4 +1,5 @@
 import type {
+  AlignmentGuide,
   ArrowElement,
   Bounds,
   CircleElement,
@@ -19,6 +20,33 @@ export const STROKE_COLOR = "#0f172a";
 export const STROKE_WIDTH = 3;
 export const TEXT_FONT_SIZE = 20;
 
+export function drawAlignmentGuides(
+  context: CanvasRenderingContext2D,
+  guides: AlignmentGuide[],
+  viewport: Viewport,
+) {
+  if (guides.length === 0) return;
+
+  context.save();
+  context.strokeStyle = "#06b6d4";
+  context.lineWidth = 1.5 / viewport.scale;
+  context.setLineDash([4 / viewport.scale, 4 / viewport.scale]);
+
+  for (const guide of guides) {
+    context.beginPath();
+    if (guide.type === "vertical") {
+      context.moveTo(guide.position, guide.start);
+      context.lineTo(guide.position, guide.end);
+    } else {
+      context.moveTo(guide.start, guide.position);
+      context.lineTo(guide.end, guide.position);
+    }
+    context.stroke();
+  }
+
+  context.restore();
+}
+
 export function renderCanvas(
   canvas: HTMLCanvasElement | null,
   strokes: FreehandStroke[],
@@ -27,6 +55,7 @@ export function renderCanvas(
   selection: SelectionSet | null,
   viewport: Viewport,
   settings: CanvasSettings,
+  guides: AlignmentGuide[] = [],
 ) {
   if (!canvas) {
     return;
@@ -110,6 +139,10 @@ export function renderCanvas(
     } else if (previewElement.type === "text") {
       drawTextElement(context, previewElement);
     }
+  }
+
+  if (guides.length > 0) {
+    drawAlignmentGuides(context, guides, viewport);
   }
 
   if (selection) {

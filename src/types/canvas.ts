@@ -151,6 +151,7 @@ export type MultiDragState = {
   pointerStart: Point;
   clicked: Selection;
   moved: boolean;
+  originalBounds?: Bounds;
 };
 
 export type Bounds = {
@@ -173,10 +174,32 @@ export type PanState = {
   originOffsetY: number;
 };
 
+export type SnapSettings = {
+  enabled: boolean;
+  gridEnabled: boolean;
+  gridSize: number;
+  threshold: number;
+};
+
+export type AlignmentGuide =
+  | {
+      type: "vertical";
+      position: number;
+      start: number;
+      end: number;
+    }
+  | {
+      type: "horizontal";
+      position: number;
+      start: number;
+      end: number;
+    };
+
 export type CanvasSettings = {
   backgroundColor: string;
   showGrid: boolean;
   gridSize: number;
+  snapSettings: SnapSettings;
 };
 
 export type RotationState = {

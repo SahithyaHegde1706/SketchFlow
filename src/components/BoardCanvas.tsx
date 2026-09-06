@@ -4,6 +4,7 @@ import { createLine, createRoundedRectangle } from "@/editor/tools";
 import type { ChangeEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type {
+  AlignmentGuide,
   ArrowElement,
   LineElement,
   RoundedRectangleElement,
@@ -29,9 +30,10 @@ import type {
   WhiteboardElement,
   AlignOperation,
 } from "@/types/canvas";
+import { calculateSnap } from "@/editor/snapping";
 import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
-import { findResizeHandleAtPoint, getCombinedSelectionBounds } from "@/canvas/selection";
+import { findResizeHandleAtPoint, getCombinedSelectionBounds, getSelectionBounds } from "@/canvas/selection";
 import { screenToLogical, zoomViewport } from "@/canvas/geometry";
 import { shouldSamplePoint } from "@/canvas/freehand";
 import { normalizeMarqueeBounds, getMarqueeSelections, MIN_MARQUEE_DISTANCE, unionSelections } from "@/editor/marquee";
@@ -143,6 +145,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const preMarqueeSelectionRef = useRef<SelectionSet>([]);
   /** Whether the marquee was started with Shift held (additive mode). */
   const marqueeShiftRef = useRef(false);
+  const alignmentGuidesRef = useRef<AlignmentGuide[]>([]);
   activeToolRef.current = activeTool;
 
   const drawCanvas = () => {
@@ -154,6 +157,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
+      alignmentGuidesRef.current,
     );
     if (marqueeRef.current && canvasRef.current) {
       renderMarquee(canvasRef.current, normalizeMarqueeBounds(marqueeRef.current), viewportRef.current);
@@ -770,12 +774,15 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         }
 
         if (movableSelections.length > 0) {
+          const context = canvasRef.current?.getContext("2d");
+          const originalBounds = context ? getCombinedSelectionBounds(context, movableSelections, elementsRef.current) : undefined;
           multiDragRef.current = {
             selections: movableSelections,
             originals: movableSelections.map(selection => cloneSelectionValue(selection)),
             pointerStart: point,
             clicked: clickedSelection,
             moved: false,
+            originalBounds,
           };
           activePointerIdRef.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -924,6 +931,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   };
 
   const cancelInteraction = () => {
+    alignmentGuidesRef.current = [];
     const canvas = canvasRef.current;
     const pointerId = activePointerIdRef.current;
 
@@ -1313,21 +1321,43 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
       const multiDrag = multiDragRef.current;
       if (multiDrag) {
-        const deltaX = point.x - multiDrag.pointerStart.x;
-        const deltaY = point.y - multiDrag.pointerStart.y;
+        const rawDeltaX = point.x - multiDrag.pointerStart.x;
+        const rawDeltaY = point.y - multiDrag.pointerStart.y;
+        let deltaX = rawDeltaX;
+        let deltaY = rawDeltaY;
+
+        const context = canvasRef.current?.getContext("2d");
+        if (context && multiDrag.originalBounds && canvasSettings.snapSettings?.enabled) {
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const canvasDimensions = rect ? { width: rect.width, height: rect.height } : { width: 800, height: 600 };
+          const snapResult = calculateSnap(
+            context,
+            multiDrag.selections,
+            elementsRef.current,
+            strokesRef.current,
+            groupsRef.current,
+            multiDrag.originalBounds,
+            rawDeltaX,
+            rawDeltaY,
+            viewportRef.current,
+            canvasDimensions,
+            canvasSettings.snapSettings,
+          );
+          deltaX = snapResult.snappedDeltaX;
+          deltaY = snapResult.snappedDeltaY;
+          alignmentGuidesRef.current = snapResult.guides;
+        } else {
+          alignmentGuidesRef.current = [];
+        }
+
         multiDrag.selections.forEach((selection, index) => {
           const original = multiDrag.originals[index];
           if (original) {
             moveSelection(selection, original, deltaX, deltaY);
           }
         });
-        multiDrag.moved = multiDrag.moved || deltaX !== 0 || deltaY !== 0;
-        renderCanvas(
-          canvasRef.current,
-          strokesRef.current,
-          elementsRef.current,
-          null, selectionRef.current,
-          viewportRef.current, canvasSettings);
+        multiDrag.moved = multiDrag.moved || rawDeltaX !== 0 || rawDeltaY !== 0;
+        drawCanvas();
         return;
       }
 
@@ -1335,6 +1365,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
       if (drag) {
         if (drag.type === "resize" && drag.handle) {
+          alignmentGuidesRef.current = [];
           resizeSelection(
             drag.selection,
             drag.original as FreehandStroke | WhiteboardElement,
@@ -1344,14 +1375,38 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             canvasRef.current?.getContext("2d") ?? undefined,
           );
         } else {
-          moveSelection(drag.selection, drag.original, point.x - drag.pointerStart.x, point.y - drag.pointerStart.y);
+          const rawDeltaX = point.x - drag.pointerStart.x;
+          const rawDeltaY = point.y - drag.pointerStart.y;
+          let deltaX = rawDeltaX;
+          let deltaY = rawDeltaY;
+
+          const context = canvasRef.current?.getContext("2d");
+          const origBounds = context ? getSelectionBounds(context, drag.selection, elementsRef.current) : undefined;
+          if (context && origBounds && canvasSettings.snapSettings?.enabled) {
+            const rect = canvasRef.current?.getBoundingClientRect();
+            const canvasDimensions = rect ? { width: rect.width, height: rect.height } : { width: 800, height: 600 };
+            const snapResult = calculateSnap(
+              context,
+              [drag.selection],
+              elementsRef.current,
+              strokesRef.current,
+              groupsRef.current,
+              origBounds,
+              rawDeltaX,
+              rawDeltaY,
+              viewportRef.current,
+              canvasDimensions,
+              canvasSettings.snapSettings,
+            );
+            deltaX = snapResult.snappedDeltaX;
+            deltaY = snapResult.snappedDeltaY;
+            alignmentGuidesRef.current = snapResult.guides;
+          } else {
+            alignmentGuidesRef.current = [];
+          }
+          moveSelection(drag.selection, drag.original, deltaX, deltaY);
         }
-        renderCanvas(
-          canvasRef.current,
-          strokesRef.current,
-          elementsRef.current,
-          null, selectionRef.current,
-          viewportRef.current, canvasSettings);
+        drawCanvas();
       }
       return;
     }
@@ -1567,12 +1622,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         multiDragRef.current = null;
         dragRef.current = null;
         activePointerIdRef.current = null;
-        renderCanvas(
-          canvasRef.current,
-          strokesRef.current,
-          elementsRef.current,
-          null, selectionRef.current,
-          viewportRef.current, canvasSettings);
+        alignmentGuidesRef.current = [];
+        drawCanvas();
         if (multiDrag.moved) {
           addHistory();
         }
@@ -1584,12 +1635,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       activePointerIdRef.current = null;
-      renderCanvas(
-        canvasRef.current,
-        strokesRef.current,
-        elementsRef.current,
-        null, selectionRef.current,
-        viewportRef.current, canvasSettings);
+      alignmentGuidesRef.current = [];
+      drawCanvas();
       resetDuplicateState(duplicateStateRef.current);
       addHistory();
       return;

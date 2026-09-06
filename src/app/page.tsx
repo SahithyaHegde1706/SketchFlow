@@ -33,6 +33,12 @@ export default function Home() {
     backgroundColor: "#f8fafc",
     showGrid: false,
     gridSize: 16,
+    snapSettings: {
+      enabled: true,
+      gridEnabled: false,
+      gridSize: 16,
+      threshold: 6,
+    },
   });
   const boardRef = useRef<BoardCanvasHandle>(null);
 
