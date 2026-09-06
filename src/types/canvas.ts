@@ -136,6 +136,12 @@ export type PanState = {
   originOffsetY: number;
 };
 
+export type CanvasSettings = {
+  backgroundColor: string;
+  showGrid: boolean;
+  gridSize: number;
+};
+
 export type RotationState = {
   selections: Selection[];
   originals: (FreehandStroke | WhiteboardElement | Group)[];

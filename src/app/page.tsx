@@ -9,7 +9,7 @@ import { LayersPanel } from "@/components/LayersPanel";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
 import type { LayerAvailability, LayerOperation } from "@/editor/layering";
 
-import type { Tool, CreationRecord, Group, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { Tool, CreationRecord, Group, SelectionSet, WhiteboardElement, CanvasSettings } from "@/types/canvas";
 
 export default function Home() {
   const [activeTool, setActiveTool] = useState<Tool>("select");
@@ -28,6 +28,11 @@ export default function Home() {
   });
   const [groupAvailability, setGroupAvailability] = useState({ canGroup: false, canUngroup: false });
   const [alignAvailability, setAlignAvailability] = useState({ canAlign: false, canDistribute: false });
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>({
+    backgroundColor: "#f8fafc",
+    showGrid: false,
+    gridSize: 16,
+  });
   const boardRef = useRef<BoardCanvasHandle>(null);
 
   return (
@@ -54,6 +59,7 @@ export default function Home() {
         <BoardCanvas
           ref={boardRef}
           activeTool={activeTool}
+          canvasSettings={canvasSettings}
           onToolSelect={setActiveTool}
           onHistoryChange={(canUndo, canRedo) => setHistoryStatus({ canUndo, canRedo })}
           onLayerChange={setLayerAvailability}
@@ -80,7 +86,10 @@ export default function Home() {
                 selections={documentState.selections}
                 elements={documentState.records.map(r => r.kind === "element" ? r.value : null).filter(Boolean) as WhiteboardElement[]}
                 groups={documentState.groups}
+                canvasSettings={canvasSettings}
                 onUpdateProperties={(updates) => boardRef.current?.updateProperties(updates)}
+                onUpdateCanvasSettings={setCanvasSettings}
+                onClose={() => setActivePanel(null)}
               />
             )}
           </div>

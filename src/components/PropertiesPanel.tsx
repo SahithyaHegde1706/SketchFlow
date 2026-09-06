@@ -1,10 +1,13 @@
-import type { SelectionSet, WhiteboardElement, Group, TextElement } from "@/types/canvas";
+import type { SelectionSet, WhiteboardElement, Group, TextElement, CanvasSettings } from "@/types/canvas";
 
 type PropertiesPanelProps = {
   selections: SelectionSet;
   elements: WhiteboardElement[];
   groups: Group[];
+  canvasSettings: CanvasSettings;
   onUpdateProperties: (updates: Partial<WhiteboardElement>) => void;
+  onUpdateCanvasSettings: (settings: CanvasSettings) => void;
+  onClose?: () => void;
 };
 
 // Helper to get all flattened whiteboard elements from the selection
@@ -25,17 +28,56 @@ function getSelectedElements(selections: SelectionSet, allElements: WhiteboardEl
   return selectedElements;
 }
 
-export function PropertiesPanel({ selections, elements, onUpdateProperties }: PropertiesPanelProps) {
+export function PropertiesPanel({ selections, elements, canvasSettings, onUpdateProperties, onUpdateCanvasSettings }: PropertiesPanelProps) {
   const selectedElements = getSelectedElements(selections, elements);
   
   if (selectedElements.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center text-center text-slate-400">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-2 opacity-50">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-        </svg>
-        <p className="text-sm font-medium">No selection</p>
-        <p className="text-xs mt-1">Select an element to edit its properties.</p>
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div className="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">
+          Canvas Settings
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Background</label>
+            <input 
+              type="color" 
+              value={canvasSettings.backgroundColor}
+              onChange={(e) => onUpdateCanvasSettings({ ...canvasSettings, backgroundColor: e.target.value })}
+              className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
+              title="Background Color"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Grid</label>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="sr-only peer" 
+                checked={canvasSettings.showGrid}
+                onChange={(e) => onUpdateCanvasSettings({ ...canvasSettings, showGrid: e.target.checked })}
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Grid Size</label>
+            <select
+              value={canvasSettings.gridSize}
+              onChange={(e) => onUpdateCanvasSettings({ ...canvasSettings, gridSize: Number(e.target.value) })}
+              className="border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400"
+              disabled={!canvasSettings.showGrid}
+            >
+              <option value="8">8</option>
+              <option value="16">16</option>
+              <option value="24">24</option>
+              <option value="32">32</option>
+            </select>
+          </div>
+        </div>
       </div>
     );
   }

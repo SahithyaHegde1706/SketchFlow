@@ -4,6 +4,7 @@ import type { ChangeEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type {
   ArrowElement,
+  CanvasSettings,
   CircleElement,
   CreationRecord,
   DragState,
@@ -54,6 +55,7 @@ import type { ClipboardState } from "@/clipboard/types";
 
 type BoardCanvasProps = {
   activeTool: Tool;
+  canvasSettings: CanvasSettings;
   onToolSelect: (tool: Tool) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
@@ -79,7 +81,7 @@ export type BoardCanvasHandle = {
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onDocumentChange }, ref) => {
+  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onDocumentChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -195,6 +197,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       activeArrowRef.current,
       selectionRef.current,
       viewportRef.current,
+      canvasSettings,
     );
     notifyLayerChange();
   };
@@ -265,8 +268,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
         activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-        selectionRef.current, viewportRef.current,
-      );
+        selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
     }
@@ -282,8 +284,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
         activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-        selectionRef.current, viewportRef.current,
-      );
+        selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
     }
@@ -302,8 +303,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       null,
       null,
       selectionRef.current,
-      viewportRef.current,
-    );
+      viewportRef.current, canvasSettings);
     addHistory();
     notifyLayerChange();
   };
@@ -333,8 +333,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
       activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-      selectionRef.current, viewportRef.current,
-    );
+      selectionRef.current, viewportRef.current, canvasSettings);
     addHistory();
     notifyClipboardChange();
     notifyLayerChange();
@@ -365,8 +364,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
       activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-      selectionRef.current, viewportRef.current,
-    );
+      selectionRef.current, viewportRef.current, canvasSettings);
     addHistory();
     notifyClipboardChange();
     notifyLayerChange();
@@ -388,8 +386,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
         activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-        selectionRef.current, viewportRef.current,
-      );
+        selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
     }
   };
@@ -399,8 +396,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     renderCanvas(
       canvasRef.current, strokesRef.current, elementsRef.current,
       activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-      selectionRef.current, viewportRef.current,
-    );
+      selectionRef.current, viewportRef.current, canvasSettings);
     notifyLayerChange();
   };
 
@@ -427,8 +423,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
         activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-        selectionRef.current, viewportRef.current,
-      );
+        selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
     }
@@ -475,8 +470,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       renderCanvas(
         canvasRef.current, strokesRef.current, elementsRef.current,
         activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current,
-        selectionRef.current, viewportRef.current,
-      );
+        selectionRef.current, viewportRef.current, canvasSettings);
       addHistory();
       notifyLayerChange();
     }
@@ -523,8 +517,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         activeCircleRef.current,
         activeArrowRef.current,
         selectionRef.current,
-        viewportRef.current,
-      );
+        viewportRef.current, canvasSettings);
     };
 
     const resizeObserver = new ResizeObserver(resizeCanvas);
@@ -571,6 +564,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       activeArrowRef.current,
       selectionRef.current,
       viewportRef.current,
+      canvasSettings,
     );
   };
 
@@ -723,8 +717,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         null,
         null,
         selectionRef.current,
-        viewportRef.current,
-      );
+        viewportRef.current, canvasSettings);
       return;
     }
 
@@ -764,6 +757,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       activeArrowRef.current,
       selectionRef.current,
       viewportRef.current,
+      canvasSettings,
     );
   };
 
@@ -830,8 +824,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       null,
       null,
       selectionRef.current,
-      viewportRef.current,
-    );
+      viewportRef.current, canvasSettings);
     addHistory();
   };
 
@@ -925,8 +918,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       null,
       null,
       selectionRef.current,
-      viewportRef.current,
-    );
+      viewportRef.current, canvasSettings);
   };
 
   const moveSelectedByKeyboard = (deltaX: number, deltaY: number) => {
@@ -948,8 +940,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       null,
       null,
       selectionRef.current,
-      viewportRef.current,
-    );
+      viewportRef.current, canvasSettings);
     return true;
   };
 
@@ -1023,8 +1014,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             null,
             null,
             selectionRef.current,
-            viewportRef.current,
-          );
+            viewportRef.current, canvasSettings);
           actions.notifyClipboardChange();
           actions.notifyLayerChange();
         }
@@ -1149,8 +1139,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         activeCircleRef.current,
         activeArrowRef.current,
         selectionRef.current,
-        viewportRef.current,
-      );
+        viewportRef.current, canvasSettings);
       return;
     }
 
@@ -1207,8 +1196,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           null,
           null,
           selectionRef.current,
-          viewportRef.current,
-        );
+          viewportRef.current, canvasSettings);
         return;
       }
 
@@ -1235,8 +1223,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           null,
           null,
           selectionRef.current,
-          viewportRef.current,
-        );
+          viewportRef.current, canvasSettings);
       }
       return;
     }
@@ -1279,6 +1266,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       activeArrowRef.current,
       selectionRef.current,
       viewportRef.current,
+      canvasSettings,
     );
   };
 
@@ -1343,8 +1331,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           null,
           null,
           selectionRef.current,
-          viewportRef.current,
-        );
+          viewportRef.current, canvasSettings);
         if (rotation.moved) {
           addHistory();
         }
@@ -1371,8 +1358,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           null,
           null,
           selectionRef.current,
-          viewportRef.current,
-        );
+          viewportRef.current, canvasSettings);
         if (multiDrag.moved) {
           addHistory();
         }
@@ -1392,8 +1378,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         null,
         null,
         selectionRef.current,
-        viewportRef.current,
-      );
+        viewportRef.current, canvasSettings);
       addHistory();
       return;
     }
@@ -1411,8 +1396,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       null,
       null,
       selectionRef.current,
-      viewportRef.current,
-    );
+      viewportRef.current, canvasSettings);
     addHistory();
   };
 
@@ -1469,8 +1453,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         null,
         null,
         selectionRef.current,
-        viewportRef.current,
-      );
+        viewportRef.current, canvasSettings);
       addHistory();
       return;
     }
@@ -1523,4 +1506,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 });
 
 BoardCanvas.displayName = "BoardCanvas";
+
+
 

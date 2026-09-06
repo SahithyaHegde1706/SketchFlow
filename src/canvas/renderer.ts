@@ -6,6 +6,7 @@ import type {
   SelectionSet,
   Viewport,
   WhiteboardElement,
+  CanvasSettings,
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
 import { drawTextElement } from "./text";
@@ -23,6 +24,7 @@ export function renderCanvas(
   arrowPreview: ArrowElement | null,
   selection: SelectionSet | null,
   viewport: Viewport,
+  settings: CanvasSettings,
 ) {
   if (!canvas) {
     return;
@@ -38,12 +40,39 @@ export function renderCanvas(
   const devicePixelRatio = window.devicePixelRatio || 1;
   context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   context.clearRect(0, 0, bounds.width, bounds.height);
-  context.fillStyle = "#ffffff";
+  context.fillStyle = settings.backgroundColor;
   context.fillRect(0, 0, bounds.width, bounds.height);
 
   context.save();
   context.translate(viewport.offsetX, viewport.offsetY);
   context.scale(viewport.scale, viewport.scale);
+
+  if (settings.showGrid) {
+    context.save();
+    const left = -viewport.offsetX / viewport.scale;
+    const top = -viewport.offsetY / viewport.scale;
+    const right = (bounds.width - viewport.offsetX) / viewport.scale;
+    const bottom = (bounds.height - viewport.offsetY) / viewport.scale;
+
+    let activeGridSize = settings.gridSize;
+    while (activeGridSize * viewport.scale < 8) {
+      activeGridSize *= 2;
+    }
+
+    const startX = Math.floor(left / activeGridSize) * activeGridSize;
+    const startY = Math.floor(top / activeGridSize) * activeGridSize;
+
+    context.fillStyle = "#cbd5e1";
+    context.beginPath();
+    for (let x = startX; x < right; x += activeGridSize) {
+      for (let y = startY; y < bottom; y += activeGridSize) {
+        context.moveTo(x, y);
+        context.arc(x, y, 1.5 / viewport.scale, 0, Math.PI * 2);
+      }
+    }
+    context.fill();
+    context.restore();
+  }
 
   for (const stroke of strokes) {
     drawStroke(context, stroke);
