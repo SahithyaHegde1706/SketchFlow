@@ -12,6 +12,7 @@ import type {
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
 import { drawTextElement } from "./text";
+import { drawFreehandStroke } from "./freehand";
 
 export const STROKE_COLOR = "#0f172a";
 export const STROKE_WIDTH = 3;
@@ -118,24 +119,7 @@ export function renderCanvas(
 }
 
 export function drawStroke(context: CanvasRenderingContext2D, stroke: FreehandStroke) {
-  const firstPoint = stroke[0];
-
-  if (!firstPoint) {
-    return;
-  }
-
-  context.strokeStyle = STROKE_COLOR;
-  context.lineWidth = STROKE_WIDTH;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-  context.beginPath();
-  context.moveTo(firstPoint.x, firstPoint.y);
-
-  for (const point of stroke.slice(1)) {
-    context.lineTo(point.x, point.y);
-  }
-
-  context.stroke();
+  drawFreehandStroke(context, stroke, STROKE_COLOR, STROKE_WIDTH);
 }
 
 export function drawRectangle(

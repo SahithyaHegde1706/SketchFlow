@@ -32,6 +32,7 @@ import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
 import { findResizeHandleAtPoint, getCombinedSelectionBounds } from "@/canvas/selection";
 import { screenToLogical, zoomViewport } from "@/canvas/geometry";
+import { shouldSamplePoint } from "@/canvas/freehand";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
 import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
@@ -529,6 +530,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       resizeObserver.disconnect();
       window.removeEventListener("resize", resizeCanvas);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getPoint = (
@@ -590,6 +592,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
     canvas.addEventListener("wheel", onNativeWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onNativeWheel);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -1106,6 +1109,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       window.removeEventListener("keyup", handleKeyUp);
       window.removeEventListener("blur", handleWindowBlur);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
@@ -1246,7 +1250,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       const stroke = activeStrokeRef.current;
 
       if (stroke) {
-        stroke.push(point);
+        const lastPoint = stroke[stroke.length - 1];
+        if (!lastPoint || shouldSamplePoint(lastPoint, point)) {
+          stroke.push(point);
+        }
       }
     }
 
