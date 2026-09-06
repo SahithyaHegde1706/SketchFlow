@@ -2,7 +2,7 @@ import type { FreehandStroke, WhiteboardElement, Group, SelectionSet } from "@/t
 import { rotatePoint } from "@/canvas/geometry";
 
 export function getElementCenter(element: WhiteboardElement): { x: number; y: number } {
-  if (element.type === "arrow") {
+  if (element.type === "arrow" || element.type === "line") {
     return {
       x: (element.startX + element.endX) / 2,
       y: (element.startY + element.endY) / 2,
@@ -32,8 +32,8 @@ export function rotateElement(
   const dx = newCenter.x - origCenter.x;
   const dy = newCenter.y - origCenter.y;
 
-  if (target.type === "arrow" && original.type === "arrow") {
-    // Arrow endpoints need to orbit the main orbitCenter!
+  if ((target.type === "arrow" || target.type === "line") && (original.type === "arrow" || original.type === "line")) {
+    // Arrow and line endpoints need to orbit the main orbitCenter!
     const newStart = rotatePoint({ x: original.startX, y: original.startY }, orbitCenter, deltaAngle);
     const newEnd = rotatePoint({ x: original.endX, y: original.endY }, orbitCenter, deltaAngle);
     target.startX = newStart.x;
@@ -41,7 +41,7 @@ export function rotateElement(
     target.endX = newEnd.x;
     target.endY = newEnd.y;
     target.rotation = (original.rotation || 0) + deltaAngle;
-  } else if (target.type !== "arrow" && original.type !== "arrow") {
+  } else if (target.type !== "arrow" && target.type !== "line" && original.type !== "arrow" && original.type !== "line") {
     target.x = original.x + dx;
     target.y = original.y + dy;
     target.rotation = (original.rotation || 0) + deltaAngle;
