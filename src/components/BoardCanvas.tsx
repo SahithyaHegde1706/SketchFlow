@@ -718,6 +718,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             src: dataUrl,
             naturalWidth: img.naturalWidth,
             naturalHeight: img.naturalHeight,
+            initialWidth: w,
+            initialHeight: h,
+            maintainAspectRatio: true,
             rotation: 0,
             locked: false,
           };

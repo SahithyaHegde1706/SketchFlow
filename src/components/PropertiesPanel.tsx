@@ -206,6 +206,10 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
     ? (new Set(textElements.map(e => e.lineHeight || 1.2)).size === 1 ? (textElements[0].lineHeight || 1.2) : "mixed")
     : undefined;
 
+  const imageElements = selectedElements.filter(e => e.type === "image") as (WhiteboardElement & { type: "image" })[];
+  const isSingleImage = imageElements.length === 1 && selectedElements.length === 1;
+  const imageElement = isSingleImage ? imageElements[0] : null;
+
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-6">
       <div className="text-sm font-semibold text-slate-800 border-b border-slate-100 pb-2">
@@ -493,6 +497,101 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
           </div>
         </div>
       </div>
+
+      {isSingleImage && imageElement && (
+        <div className="space-y-4 pt-2 border-t border-slate-100">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Image</h3>
+          
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Width</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={Math.round(imageElement.width)}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (isNaN(val) || val < 1) return;
+                  if (imageElement.maintainAspectRatio) {
+                    const ratio = imageElement.naturalHeight / imageElement.naturalWidth;
+                    onUpdateProperties({ width: val, height: val * ratio });
+                  } else {
+                    onUpdateProperties({ width: val });
+                  }
+                }}
+                disabled={isLocked}
+                className="w-20 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              />
+              <span className="text-xs text-slate-500">px</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Height</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={Math.round(imageElement.height)}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value);
+                  if (isNaN(val) || val < 1) return;
+                  if (imageElement.maintainAspectRatio) {
+                    const ratio = imageElement.naturalWidth / imageElement.naturalHeight;
+                    onUpdateProperties({ height: val, width: val * ratio });
+                  } else {
+                    onUpdateProperties({ height: val });
+                  }
+                }}
+                disabled={isLocked}
+                className="w-20 border border-slate-200 rounded p-1 text-sm text-slate-700 focus:outline-none focus:border-teal-400 disabled:opacity-40 disabled:cursor-not-allowed"
+              />
+              <span className="text-xs text-slate-500">px</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Maintain Aspect Ratio</label>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                className="sr-only peer" 
+                checked={imageElement.maintainAspectRatio ?? true}
+                onChange={(e) => onUpdateProperties({ maintainAspectRatio: e.target.checked })}
+                disabled={isLocked}
+              />
+              <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500 peer-disabled:opacity-50"></div>
+            </label>
+          </div>
+
+          <div className="flex flex-col gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                const w = imageElement.initialWidth || imageElement.naturalWidth;
+                const h = imageElement.initialHeight || imageElement.naturalHeight;
+                onUpdateProperties({ width: w, height: h });
+              }}
+              disabled={isLocked}
+              className="w-full text-center py-1.5 px-3 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reset Size
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateProperties({ rotation: 0 });
+              }}
+              disabled={isLocked || (imageElement.rotation || 0) === 0}
+              className="w-full text-center py-1.5 px-3 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reset Rotation
+            </button>
+          </div>
+        </div>
+      )}
       
     </div>
   );

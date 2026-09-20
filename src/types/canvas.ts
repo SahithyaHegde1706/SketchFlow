@@ -102,6 +102,9 @@ export type ImageElement = {
   src: string;
   naturalWidth: number;
   naturalHeight: number;
+  initialWidth?: number;
+  initialHeight?: number;
+  maintainAspectRatio?: boolean;
   rotation?: number;
   locked?: boolean;
 };
