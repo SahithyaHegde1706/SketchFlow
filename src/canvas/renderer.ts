@@ -182,6 +182,13 @@ export function drawImageElement(
     context.rotate(image.rotation);
     context.translate(-cx, -cy);
   }
+  if (image.flipX || image.flipY) {
+    const cx = image.x + image.width / 2;
+    const cy = image.y + image.height / 2;
+    context.translate(cx, cy);
+    context.scale(image.flipX ? -1 : 1, image.flipY ? -1 : 1);
+    context.translate(-cx, -cy);
+  }
   
   context.drawImage(img, image.x, image.y, image.width, image.height);
   

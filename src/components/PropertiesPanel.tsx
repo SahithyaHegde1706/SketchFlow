@@ -567,6 +567,59 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
             </label>
           </div>
 
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-slate-600">Rotation</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const current = imageElement.rotation || 0;
+                  onUpdateProperties({ rotation: current - Math.PI / 2 });
+                }}
+                disabled={isLocked}
+                className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Rotate Left (-90°)"
+              >
+                ⟲
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = imageElement.rotation || 0;
+                  onUpdateProperties({ rotation: current + Math.PI / 2 });
+                }}
+                disabled={isLocked}
+                className="w-8 h-8 flex items-center justify-center border border-slate-200 rounded text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Rotate Right (+90°)"
+              >
+                ⟳
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onUpdateProperties({ flipX: !(imageElement.flipX ?? false) })}
+              disabled={isLocked}
+              className={`flex-1 text-center py-1.5 px-2 border rounded text-sm transition-colors ${
+                imageElement.flipX ? "border-teal-500 bg-teal-50 text-teal-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              Flip Horizontal
+            </button>
+            <button
+              type="button"
+              onClick={() => onUpdateProperties({ flipY: !(imageElement.flipY ?? false) })}
+              disabled={isLocked}
+              className={`flex-1 text-center py-1.5 px-2 border rounded text-sm transition-colors ${
+                imageElement.flipY ? "border-teal-500 bg-teal-50 text-teal-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              Flip Vertical
+            </button>
+          </div>
+
           <div className="flex flex-col gap-2 mt-4">
             <button
               type="button"
@@ -599,6 +652,16 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
               className="w-full text-center py-1.5 px-3 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Reset Rotation
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onUpdateProperties({ flipX: false, flipY: false });
+              }}
+              disabled={isLocked || (!(imageElement.flipX ?? false) && !(imageElement.flipY ?? false))}
+              className="w-full text-center py-1.5 px-3 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Reset Flips
             </button>
           </div>
         </div>

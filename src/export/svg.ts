@@ -243,6 +243,26 @@ function elementToSvg(
     return textToSvg(el, ox, oy, measureContext);
   }
 
+  if (el.type === "image") {
+    // If it has flips, we must wrap it in a group with the flip transform
+    const rotStr = rot ? ` ${rot}` : "";
+    if (el.flipX || el.flipY) {
+      const cx = el.x + el.width / 2 + ox;
+      const cy = el.y + el.height / 2 + oy;
+      const sx = el.flipX ? -1 : 1;
+      const sy = el.flipY ? -1 : 1;
+      // We translate to center, scale, translate back
+      const flipTransform = `transform="translate(${cx}, ${cy}) scale(${sx}, ${sy}) translate(${-cx}, ${-cy})"`;
+      return (
+        `<g ${flipTransform}${rotStr}>` +
+        `<image x="${f(el.x + ox)}" y="${f(el.y + oy)}" width="${f(el.width)}" height="${f(el.height)}" href="${el.src}" />` +
+        `</g>`
+      );
+    } else {
+      return `<image x="${f(el.x + ox)}" y="${f(el.y + oy)}" width="${f(el.width)}" height="${f(el.height)}" href="${el.src}"${rot} />`;
+    }
+  }
+
   return "";
 }
 

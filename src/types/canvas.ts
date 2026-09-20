@@ -107,6 +107,8 @@ export type ImageElement = {
   maintainAspectRatio?: boolean;
   rotation?: number;
   locked?: boolean;
+  flipX?: boolean;
+  flipY?: boolean;
 };
 
 export type WhiteboardElement =
