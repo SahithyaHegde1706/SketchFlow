@@ -77,6 +77,9 @@ import {
 } from "@/editor/locking";
 import type { SketchFlowDocumentV1 } from "@/document/types";
 import { exportToSketchFlowDocument } from "@/document/serialization";
+import type { CropState } from "@/types/canvas";
+import { getCropLocalCoordinates, applyCrop } from "@/editor/cropping";
+import { renderCropOverlay } from "@/canvas/renderer";
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -111,6 +114,7 @@ export type BoardCanvasHandle = {
   exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string) => void;
   importDocument: (doc: SketchFlowDocumentV1) => void;
   addImage?: (file: File) => void;
+  startCrop: () => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
@@ -154,6 +158,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   /** Whether the marquee was started with Shift held (additive mode). */
   const marqueeShiftRef = useRef(false);
   const alignmentGuidesRef = useRef<AlignmentGuide[]>([]);
+  const cropRef = useRef<CropState | null>(null);
+  const [isCropping, setIsCropping] = useState(false);
   activeToolRef.current = activeTool;
 
   const drawCanvas = () => {
@@ -169,6 +175,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     );
     if (marqueeRef.current && canvasRef.current) {
       renderMarquee(canvasRef.current, normalizeMarqueeBounds(marqueeRef.current), viewportRef.current);
+    }
+    if (cropRef.current && canvasRef.current) {
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) renderCropOverlay(ctx, cropRef.current, viewportRef.current);
     }
   };
 
@@ -688,6 +698,20 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     toggleLock: handleToggleLock,
     exportCanvas: handleExportCanvas,
     importDocument: handleImportDocument,
+    startCrop: () => {
+      const sel = selectionRef.current[0];
+      if (selectionRef.current.length === 1 && sel.kind === "element" && sel.value.type === "image" && !sel.value.locked) {
+        cropRef.current = {
+          element: sel.value,
+          left: 0,
+          top: 0,
+          right: sel.value.width,
+          bottom: sel.value.height
+        };
+        setIsCropping(true);
+        drawCanvas();
+      }
+    },
     addImage: async (file: File) => {
       if (file.size > 20 * 1024 * 1024) {
         alert("Image exceeds 20MB limit.");
@@ -842,6 +866,27 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
+      return;
+    }
+
+    if (cropRef.current) {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      activePointerIdRef.current = event.pointerId;
+      const point = getPoint(event);
+      const logical = screenToLogical(point, viewportRef.current);
+      const local = getCropLocalCoordinates(logical.x, logical.y, cropRef.current.element);
+      
+      const hs = 10 / viewportRef.current.scale;
+      const c = cropRef.current;
+      if (Math.abs(local.x - c.left) < hs && Math.abs(local.y - c.top) < hs) c.activeHandle = "crop-top-left";
+      else if (Math.abs(local.x - c.right) < hs && Math.abs(local.y - c.top) < hs) c.activeHandle = "crop-top-right";
+      else if (Math.abs(local.x - c.left) < hs && Math.abs(local.y - c.bottom) < hs) c.activeHandle = "crop-bottom-left";
+      else if (Math.abs(local.x - c.right) < hs && Math.abs(local.y - c.bottom) < hs) c.activeHandle = "crop-bottom-right";
+      
+      if (c.activeHandle) {
+        c.pointerStart = local;
+        c.initialCrop = { left: c.left, top: c.top, right: c.right, bottom: c.bottom };
+      }
       return;
     }
 
@@ -1391,6 +1436,33 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     const screenPoint = getPoint(event);
 
+    if (activePointerIdRef.current === event.pointerId && cropRef.current && cropRef.current.activeHandle) {
+      const logical = screenToLogical(screenPoint, viewportRef.current);
+      const local = getCropLocalCoordinates(logical.x, logical.y, cropRef.current.element);
+      
+      const c = cropRef.current;
+      const initial = c.initialCrop!;
+      const dx = local.x - c.pointerStart!.x;
+      const dy = local.y - c.pointerStart!.y;
+      
+      const minSize = 20;
+      if (c.activeHandle === "crop-top-left") {
+        c.left = Math.min(Math.max(0, initial.left + dx), c.right - minSize);
+        c.top = Math.min(Math.max(0, initial.top + dy), c.bottom - minSize);
+      } else if (c.activeHandle === "crop-top-right") {
+        c.right = Math.max(Math.min(c.element.width, initial.right + dx), c.left + minSize);
+        c.top = Math.min(Math.max(0, initial.top + dy), c.bottom - minSize);
+      } else if (c.activeHandle === "crop-bottom-left") {
+        c.left = Math.min(Math.max(0, initial.left + dx), c.right - minSize);
+        c.bottom = Math.max(Math.min(c.element.height, initial.bottom + dy), c.top + minSize);
+      } else if (c.activeHandle === "crop-bottom-right") {
+        c.right = Math.max(Math.min(c.element.width, initial.right + dx), c.left + minSize);
+        c.bottom = Math.max(Math.min(c.element.height, initial.bottom + dy), c.top + minSize);
+      }
+      drawCanvas();
+      return;
+    }
+
     if (activePointerIdRef.current === event.pointerId && activeTool === "hand" && panRef.current) {
       const pan = panRef.current;
       viewportRef.current = {
@@ -1628,6 +1700,15 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   const stopDrawing = (event: PointerEvent<HTMLCanvasElement>) => {
     if (activePointerIdRef.current !== event.pointerId) {
+      return;
+    }
+
+    if (cropRef.current && cropRef.current.activeHandle) {
+      cropRef.current.activeHandle = undefined;
+      cropRef.current.pointerStart = undefined;
+      cropRef.current.initialCrop = undefined;
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      activePointerIdRef.current = null;
       return;
     }
 
@@ -1916,6 +1997,39 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             fontSize: TEXT_FONT_SIZE * zoom,
           }}
         />
+      )}
+      {isCropping && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 z-50 bg-white shadow-lg rounded-xl p-2 border border-slate-200">
+          <button
+            onClick={() => {
+              cropRef.current = null;
+              setIsCropping(false);
+              drawCanvas();
+            }}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={async () => {
+              if (cropRef.current) {
+                const newImg = await applyCrop(cropRef.current);
+                const idx = elementsRef.current.findIndex(e => e.id === newImg.id);
+                if (idx !== -1) elementsRef.current[idx] = newImg;
+                const cIdx = creationOrderRef.current.findIndex(c => c.kind === "element" && c.value.id === newImg.id);
+                if (cIdx !== -1) creationOrderRef.current[cIdx] = { kind: "element", value: newImg };
+                selectionRef.current = [{ kind: "element", value: newImg }];
+                addHistory();
+              }
+              cropRef.current = null;
+              setIsCropping(false);
+              drawCanvas();
+            }}
+            className="px-4 py-1.5 rounded-lg text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+          >
+            Apply Crop
+          </button>
+        </div>
       )}
     </section>
   );

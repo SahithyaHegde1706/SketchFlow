@@ -251,3 +251,16 @@ export type MarqueeState = {
   /** Current Y coordinate of the pointer, in logical (canvas) coordinates. */
   currentY: number;
 };
+
+export type CropHandle = "crop-top-left" | "crop-top-right" | "crop-bottom-left" | "crop-bottom-right";
+
+export type CropState = {
+  element: ImageElement;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  activeHandle?: CropHandle;
+  pointerStart?: Point;
+  initialCrop?: { left: number; top: number; right: number; bottom: number };
+};

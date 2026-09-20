@@ -134,6 +134,7 @@ export default function Home() {
                 canvasSettings={canvasSettings}
                 onUpdateProperties={(updates) => boardRef.current?.updateProperties(updates)}
                 onUpdateCanvasSettings={setCanvasSettings}
+                onStartCrop={() => boardRef.current?.startCrop()}
                 onClose={() => setActivePanel(null)}
               />
             )}

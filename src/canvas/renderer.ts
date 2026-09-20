@@ -12,6 +12,7 @@ import type {
   LineElement,
   RoundedRectangleElement,
   ImageElement,
+  CropState,
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
 import { drawTextElement } from "./text";
@@ -395,5 +396,62 @@ export function renderMarquee(
   context.strokeRect(x, y, w, h);
 
   context.setLineDash([]);
+  context.restore();
+}
+
+export function renderCropOverlay(
+  context: CanvasRenderingContext2D,
+  cropState: CropState,
+  viewport: Viewport,
+): void {
+  const el = cropState.element;
+  context.save();
+  context.translate(viewport.offsetX, viewport.offsetY);
+  context.scale(viewport.scale, viewport.scale);
+
+  if (el.rotation) {
+    const cx = el.x + el.width / 2;
+    const cy = el.y + el.height / 2;
+    context.translate(cx, cy);
+    context.rotate(el.rotation);
+    context.translate(-cx, -cy);
+  }
+
+  // Dim the outside of the crop area
+  context.fillStyle = "rgba(0, 0, 0, 0.4)";
+  context.beginPath();
+  context.rect(el.x, el.y, el.width, el.height);
+  const cx = el.x + cropState.left;
+  const cy = el.y + cropState.top;
+  const cw = cropState.right - cropState.left;
+  const ch = cropState.bottom - cropState.top;
+  context.rect(cx + cw, cy, -cw, ch);
+  context.fill("evenodd");
+
+  // Draw crop border
+  context.strokeStyle = "#fff";
+  context.lineWidth = 1.5 / viewport.scale;
+  context.strokeRect(cx, cy, cw, ch);
+  context.strokeStyle = "#0ea5e9"; // teal / sky
+  context.setLineDash([5 / viewport.scale, 5 / viewport.scale]);
+  context.strokeRect(cx, cy, cw, ch);
+  context.setLineDash([]);
+
+  // Draw handles
+  const handleSize = 8 / viewport.scale;
+  context.fillStyle = "#fff";
+  context.strokeStyle = "#0ea5e9";
+  context.lineWidth = 1.5 / viewport.scale;
+
+  const drawHandle = (x: number, y: number) => {
+    context.fillRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+    context.strokeRect(x - handleSize / 2, y - handleSize / 2, handleSize, handleSize);
+  };
+
+  drawHandle(cx, cy); // top-left
+  drawHandle(cx + cw, cy); // top-right
+  drawHandle(cx, cy + ch); // bottom-left
+  drawHandle(cx + cw, cy + ch); // bottom-right
+
   context.restore();
 }

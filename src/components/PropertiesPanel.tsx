@@ -8,6 +8,7 @@ type PropertiesPanelProps = {
   canvasSettings: CanvasSettings;
   onUpdateProperties: (updates: Partial<WhiteboardElement>) => void;
   onUpdateCanvasSettings: (settings: CanvasSettings) => void;
+  onStartCrop?: () => void;
   onClose?: () => void;
 };
 
@@ -29,7 +30,7 @@ function getSelectedElements(selections: SelectionSet, allElements: WhiteboardEl
   return selectedElements;
 }
 
-export function PropertiesPanel({ selections, elements, canvasSettings, onUpdateProperties, onUpdateCanvasSettings }: PropertiesPanelProps) {
+export function PropertiesPanel({ selections, elements, canvasSettings, onUpdateProperties, onUpdateCanvasSettings, onStartCrop }: PropertiesPanelProps) {
   const selectedElements = getSelectedElements(selections, elements);
   const isLocked = isAnySelectionLocked(selections, elements);
 
@@ -567,6 +568,16 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
           </div>
 
           <div className="flex flex-col gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (onStartCrop) onStartCrop();
+              }}
+              disabled={isLocked}
+              className="w-full text-center py-1.5 px-3 border border-slate-200 rounded text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Crop
+            </button>
             <button
               type="button"
               onClick={() => {
