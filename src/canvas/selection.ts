@@ -11,6 +11,7 @@ function getElementBounds(context: CanvasRenderingContext2D, element: Whiteboard
     case "rectangle":
     case "roundedRectangle":
     case "circle":
+    case "image":
       unrotatedBounds = {
         left: element.x,
         top: element.y,

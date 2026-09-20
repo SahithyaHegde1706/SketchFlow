@@ -127,10 +127,10 @@ export function elementVisualBounds(
   el: WhiteboardElement,
   context: CanvasRenderingContext2D | null,
 ): Bounds {
-  const sw = el.type === "text" ? 0 : (el.strokeWidth ?? STROKE_WIDTH);
+  const sw = el.type === "text" || el.type === "image" ? 0 : (el.strokeWidth ?? STROKE_WIDTH);
   const halfSw = sw / 2;
 
-  if (el.type === "rectangle" || el.type === "roundedRectangle" || el.type === "circle") {
+  if (el.type === "rectangle" || el.type === "roundedRectangle" || el.type === "circle" || el.type === "image") {
     const corners: Point[] = [
       { x: el.x, y: el.y },
       { x: el.x + el.width, y: el.y },

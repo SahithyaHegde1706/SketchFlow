@@ -110,6 +110,7 @@ export type BoardCanvasHandle = {
   /** Export the full document as PNG or SVG and trigger a browser download. */
   exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string) => void;
   importDocument: (doc: SketchFlowDocumentV1) => void;
+  addImage?: (file: File) => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
@@ -687,6 +688,52 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     toggleLock: handleToggleLock,
     exportCanvas: handleExportCanvas,
     importDocument: handleImportDocument,
+    addImage: async (file: File) => {
+      if (file.size > 20 * 1024 * 1024) {
+        alert("Image exceeds 20MB limit.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        if (!dataUrl) return;
+        
+        const img = new Image();
+        img.onload = () => {
+          let w = img.naturalWidth;
+          let h = img.naturalHeight;
+          if (w > 600 || h > 400) {
+            const ratio = Math.min(600 / w, 400 / h);
+            w *= ratio;
+            h *= ratio;
+          }
+          
+          const newImage: WhiteboardElement = {
+            id: crypto.randomUUID(),
+            type: "image",
+            x: viewportRef.current.offsetX ? -viewportRef.current.offsetX / viewportRef.current.scale + 100 : 100,
+            y: viewportRef.current.offsetY ? -viewportRef.current.offsetY / viewportRef.current.scale + 100 : 100,
+            width: w,
+            height: h,
+            src: dataUrl,
+            naturalWidth: img.naturalWidth,
+            naturalHeight: img.naturalHeight,
+            rotation: 0,
+            locked: false,
+          };
+          
+          elementsRef.current.push(newImage);
+          creationOrderRef.current.push({ kind: "element", value: newImage });
+          selectionRef.current = [{ kind: "element", value: newImage }];
+          
+          drawCanvas();
+          addHistory();
+          notifyLayerChange();
+        };
+        img.src = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    }
   }));
 
   useEffect(() => {

@@ -11,10 +11,12 @@ import type {
   CanvasSettings,
   LineElement,
   RoundedRectangleElement,
+  ImageElement,
 } from "@/types/canvas";
 import { drawSelection } from "./selection";
 import { drawTextElement } from "./text";
 import { drawFreehandStroke } from "./freehand";
+import { getOrLoadImage } from "./images";
 
 export const STROKE_COLOR = "#0f172a";
 export const STROKE_WIDTH = 3;
@@ -120,6 +122,11 @@ export function renderCanvas(
       drawArrow(context, element);
     } else if (element.type === "line") {
       drawLine(context, element);
+    } else if (element.type === "image") {
+      drawImageElement(context, element, () => {
+        // We need a way to trigger redraw, but we don't have it easily here without a callback.
+        // In a real implementation we'd trigger a re-render from the store when the image loads.
+      });
     } else {
       drawTextElement(context, element);
     }
@@ -136,6 +143,8 @@ export function renderCanvas(
       drawArrow(context, previewElement);
     } else if (previewElement.type === "line") {
       drawLine(context, previewElement);
+    } else if (previewElement.type === "image") {
+      drawImageElement(context, previewElement, () => {});
     } else if (previewElement.type === "text") {
       drawTextElement(context, previewElement);
     }
@@ -154,6 +163,28 @@ export function renderCanvas(
 
 export function drawStroke(context: CanvasRenderingContext2D, stroke: FreehandStroke) {
   drawFreehandStroke(context, stroke, STROKE_COLOR, STROKE_WIDTH);
+}
+
+export function drawImageElement(
+  context: CanvasRenderingContext2D,
+  image: ImageElement,
+  onLoaded: () => void
+) {
+  const img = getOrLoadImage(image.src, onLoaded);
+  if (!img) return; // not loaded yet
+
+  context.save();
+  if (image.rotation) {
+    const cx = image.x + image.width / 2;
+    const cy = image.y + image.height / 2;
+    context.translate(cx, cy);
+    context.rotate(image.rotation);
+    context.translate(-cx, -cy);
+  }
+  
+  context.drawImage(img, image.x, image.y, image.width, image.height);
+  
+  context.restore();
 }
 
 export function drawRectangle(

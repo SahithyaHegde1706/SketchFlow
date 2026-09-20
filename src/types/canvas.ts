@@ -92,13 +92,28 @@ export type TextElement = {
   locked?: boolean;
 };
 
+export type ImageElement = {
+  id: string;
+  type: "image";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  rotation?: number;
+  locked?: boolean;
+};
+
 export type WhiteboardElement =
   | RectangleElement
   | RoundedRectangleElement
   | CircleElement
   | ArrowElement
   | LineElement
-  | TextElement;
+  | TextElement
+  | ImageElement;
 
 export type Group = {
   id: string;
@@ -122,6 +137,7 @@ export type Tool =
   | "arrow"
   | "line"
   | "text"
+  | "image"
   | "draw"
   | "eraser";
 

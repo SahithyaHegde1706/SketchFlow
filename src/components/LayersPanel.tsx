@@ -38,6 +38,7 @@ function getElementLabel(element: WhiteboardElement): string {
       const preview = element.text.length > 10 ? element.text.slice(0, 10) + "..." : element.text;
       return `Text: ${preview}`;
     }
+    case "image": return "Image";
   }
 }
 
@@ -258,6 +259,7 @@ function LayerNodeView({
           {node.type === "element" && node.label.startsWith("Circ") && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/></svg>}
           {node.type === "element" && node.label.startsWith("Arrow") && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>}
           {node.type === "element" && node.label.startsWith("Text") && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>}
+          {node.type === "element" && node.label === "Image" && <span>🖼️</span>}
         </span>
         <span className="truncate flex-1">{node.label}</span>
 

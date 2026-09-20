@@ -98,7 +98,7 @@ export default function Home() {
         }}
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} />
+        <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} onImageSelect={(file) => boardRef.current?.addImage?.(file)} />
         <BoardCanvas
           ref={boardRef}
           activeTool={activeTool}

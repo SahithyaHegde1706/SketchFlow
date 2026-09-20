@@ -40,10 +40,11 @@ export function findSelectionAtPoint(
         point.y >= bounds.top - hitPadding &&
         point.y <= bounds.bottom + hitPadding;
     } else {
-      isHit =
+      isHit = Boolean(
         record.kind === "stroke"
           ? isPointOnStroke(point, record.value)
-          : isPointOnElement(context, point, record.value);
+          : isPointOnElement(context, point, record.value)
+      );
     }
 
     if (isHit) {
@@ -77,7 +78,21 @@ export function isPointOnElement(
       return isPointNearLine(hitPoint, element);
     case "text":
       return isPointInTextBounds(context, hitPoint, element);
+    case "image":
+      return isPointNearImage(hitPoint, element);
   }
+}
+
+export function isPointNearImage(point: Point, image: { x: number; y: number; width: number; height: number; }) {
+  const left = image.x;
+  const right = image.x + image.width;
+  const top = image.y;
+  const bottom = image.y + image.height;
+  
+  if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) {
+    return true;
+  }
+  return false;
 }
 
 export function isPointOnStroke(point: Point, stroke: FreehandStroke) {
