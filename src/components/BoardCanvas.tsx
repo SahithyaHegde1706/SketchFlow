@@ -31,6 +31,8 @@ import type {
   AlignOperation,
 } from "@/types/canvas";
 import { calculateSnap } from "@/editor/snapping";
+import { exportToPng } from "@/export/png";
+import { exportToSvg } from "@/export/svg";
 import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
 import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
 import { findResizeHandleAtPoint, getCombinedSelectionBounds, getSelectionBounds } from "@/canvas/selection";
@@ -103,6 +105,8 @@ export type BoardCanvasHandle = {
   lock: () => void;
   unlock: () => void;
   toggleLock: (target?: Selection) => void;
+  /** Export the full document as PNG or SVG and trigger a browser download. */
+  exportCanvas: (format: "png" | "svg", backgroundColor: string) => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
@@ -563,6 +567,22 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   };
 
+  const handleExportCanvas = (format: "png" | "svg", backgroundColor: string) => {
+    // Export is a read-only operation; it must NOT modify any editor state.
+    const strokes       = strokesRef.current;
+    const elements      = elementsRef.current;
+    // Pass creationOrderRef so the export reproduces the exact z-order the user
+    // sees: layering operations (Bring Forward / Send Backward / etc.) reorder
+    // creationOrderRef, not strokesRef / elementsRef, so creationOrderRef is the
+    // canonical layer-order source.
+    const creationOrder = creationOrderRef.current;
+    if (format === "svg") {
+      exportToSvg(strokes, elements, backgroundColor, creationOrder);
+    } else {
+      exportToPng(strokes, elements, backgroundColor, creationOrder);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     undo: handleUndo,
     redo: handleRedo,
@@ -579,6 +599,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     lock: handleLock,
     unlock: handleUnlock,
     toggleLock: handleToggleLock,
+    exportCanvas: handleExportCanvas,
   }));
 
   useEffect(() => {

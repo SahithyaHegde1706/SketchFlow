@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRef, useState } from "react";
 import { BoardCanvas } from "@/components/BoardCanvas";
@@ -64,6 +64,8 @@ export default function Home() {
         onUnlock={() => boardRef.current?.unlock()}
         activePanel={activePanel}
         onTogglePanel={(panel) => setActivePanel(activePanel === panel ? null : panel)}
+        onExportPng={() => boardRef.current?.exportCanvas("png", canvasSettings.backgroundColor)}
+        onExportSvg={() => boardRef.current?.exportCanvas("svg", canvasSettings.backgroundColor)}
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} />
