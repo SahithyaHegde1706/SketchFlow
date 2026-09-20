@@ -75,6 +75,8 @@ import {
   getLockAvailability,
   setSelectionLock,
 } from "@/editor/locking";
+import type { SketchFlowDocumentV1 } from "@/document/types";
+import { exportToSketchFlowDocument } from "@/document/serialization";
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -106,7 +108,8 @@ export type BoardCanvasHandle = {
   unlock: () => void;
   toggleLock: (target?: Selection) => void;
   /** Export the full document as PNG or SVG and trigger a browser download. */
-  exportCanvas: (format: "png" | "svg", backgroundColor: string) => void;
+  exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string) => void;
+  importDocument: (doc: SketchFlowDocumentV1) => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
@@ -567,7 +570,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   };
 
-  const handleExportCanvas = (format: "png" | "svg", backgroundColor: string) => {
+  const handleExportCanvas = (format: "png" | "svg" | "sketchflow", backgroundColor: string) => {
     // Export is a read-only operation; it must NOT modify any editor state.
     const strokes       = strokesRef.current;
     const elements      = elementsRef.current;
@@ -578,9 +581,92 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     const creationOrder = creationOrderRef.current;
     if (format === "svg") {
       exportToSvg(strokes, elements, backgroundColor, creationOrder);
-    } else {
+    } else if (format === "png") {
       exportToPng(strokes, elements, backgroundColor, creationOrder);
+    } else if (format === "sketchflow") {
+      exportToSketchFlowDocument(strokes, elements, groupsRef.current, creationOrder, canvasSettings);
     }
+  };
+
+  const handleImportDocument = (doc: SketchFlowDocumentV1) => {
+    // 1. Reset transient states
+    selectionRef.current = [];
+    dragRef.current = null;
+    multiDragRef.current = null;
+    rotationRef.current = null;
+    activeStrokeRef.current = null;
+    marqueeRef.current = null;
+    setTextEditor(null);
+
+    // 2. Overwrite document data
+    strokesRef.current = doc.strokes;
+    elementsRef.current = doc.elements;
+    groupsRef.current = doc.groups;
+
+    // 3. Reconstruct canonical layer order
+    creationOrderRef.current = doc.creationOrder.map((record) => {
+      if (record.kind === "stroke") {
+        return { kind: "stroke", value: strokesRef.current[record.index]! };
+      } else {
+        return { kind: "element", value: elementsRef.current.find(e => e.id === record.id)! };
+      }
+    });
+
+    // 4. Center viewport around content (if there is content)
+    const context = canvasRef.current?.getContext("2d");
+    if (context && (strokesRef.current.length > 0 || elementsRef.current.length > 0)) {
+      // Find bounding box
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      
+      const checkPoint = (p: Point) => {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      };
+
+      for (const stroke of strokesRef.current) stroke.forEach(checkPoint);
+      for (const el of elementsRef.current) {
+        const startX = "x" in el ? el.x : el.startX;
+        const startY = "y" in el ? el.y : el.startY;
+        checkPoint({ x: startX, y: startY });
+        if (el.type === "rectangle" || el.type === "roundedRectangle" || el.type === "circle") {
+          checkPoint({ x: el.x + el.width, y: el.y + el.height });
+        } else if (el.type === "line" || el.type === "arrow") {
+          checkPoint({ x: el.endX, y: el.endY });
+        }
+      }
+
+      if (minX !== Infinity && canvasRef.current) {
+        const boundsWidth = maxX - minX;
+        const boundsHeight = maxY - minY;
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        
+        // Fit within 80% of canvas
+        const scaleX = (canvasRect.width * 0.8) / Math.max(boundsWidth, 1);
+        const scaleY = (canvasRect.height * 0.8) / Math.max(boundsHeight, 1);
+        const newScale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.25), 2);
+        
+        const centerX = minX + boundsWidth / 2;
+        const centerY = minY + boundsHeight / 2;
+        
+        viewportRef.current = {
+          scale: newScale,
+          offsetX: canvasRect.width / 2 - centerX * newScale,
+          offsetY: canvasRect.height / 2 - centerY * newScale,
+        };
+        setZoom(newScale);
+      }
+    } else {
+      // Empty document, reset viewport
+      viewportRef.current = { scale: 1, offsetX: 0, offsetY: 0 };
+      setZoom(1);
+    }
+
+    // 5. Update canvas and history
+    drawCanvas();
+    addHistory();
+    notifyLayerChange();
   };
 
   useImperativeHandle(ref, () => ({
@@ -600,6 +686,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     unlock: handleUnlock,
     toggleLock: handleToggleLock,
     exportCanvas: handleExportCanvas,
+    importDocument: handleImportDocument,
   }));
 
   useEffect(() => {

@@ -32,6 +32,10 @@ type BoardHeaderProps = {
   onExportPng?: () => void;
   /** Called when the user clicks Export SVG. */
   onExportSvg?: () => void;
+  /** Called when the user clicks Export SketchFlow. */
+  onExportSketchFlow?: () => void;
+  /** Called when the user selects a file to import. */
+  onImportDocument?: (file: File) => void;
 };
 
 export function BoardHeader({
@@ -56,9 +60,23 @@ export function BoardHeader({
   onTogglePanel,
   onExportPng,
   onExportSvg,
+  onExportSketchFlow,
+  onImportDocument,
 }: BoardHeaderProps) {
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onImportDocument?.(file);
+    }
+    // Clear the input value so the same file can be imported again if needed
+    if (e.target) {
+      e.target.value = "";
+    }
+  };
 
   // Close export popover when clicking outside
   useEffect(() => {
@@ -198,6 +216,28 @@ export function BoardHeader({
 
         <div className="mx-1 h-5 w-px bg-slate-200" />
 
+        {/* Import button */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          accept=".sketchflow.json,.json"
+          onChange={handleFileChange}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          title="Import"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-[0.97]"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          <span>Import</span>
+        </button>
+
         {/* Export popover */}
         <div ref={exportRef} className="relative">
           <button
@@ -246,6 +286,17 @@ export function BoardHeader({
                 >
                   <span className="flex size-6 items-center justify-center rounded-md bg-violet-50 text-violet-600 text-[10px] font-bold">SVG</span>
                   Export SVG
+                </button>
+                <div className="mx-2 my-0.5 h-px bg-slate-100" />
+                <button
+                  type="button"
+                  id="export-sketchflow-button"
+                  role="menuitem"
+                  onClick={() => { setExportOpen(false); onExportSketchFlow?.(); }}
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+                >
+                  <span className="flex size-6 items-center justify-center rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold">SF</span>
+                  Export SketchFlow
                 </button>
               </div>
             </div>
