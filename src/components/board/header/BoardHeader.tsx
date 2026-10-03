@@ -9,6 +9,9 @@ import { useEffect, useRef, useState } from "react";
 import type { AlignOperation } from "@/types/canvas";
 
 type BoardHeaderProps = {
+  boardName: string;
+  onBoardNameChange: (name: string) => void;
+  onNewDocument?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
@@ -62,8 +65,14 @@ export function BoardHeader({
   onExportSvg,
   onExportSketchFlow,
   onImportDocument,
+  boardName,
+  onBoardNameChange,
+  onNewDocument,
 }: BoardHeaderProps) {
   const [exportOpen, setExportOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingName, setEditingName] = useState(boardName);
+  const inputRef = useRef<HTMLInputElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,6 +84,32 @@ export function BoardHeader({
     // Clear the input value so the same file can be imported again if needed
     if (e.target) {
       e.target.value = "";
+    }
+  };
+
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  useEffect(() => {
+    setEditingName(boardName);
+  }, [boardName]);
+
+  const handleSaveName = () => {
+    const trimmedName = editingName.trim();
+    if (trimmedName && trimmedName !== boardName) onBoardNameChange(trimmedName);
+    else if (!trimmedName) setEditingName(boardName);
+    setIsEditing(false);
+  };
+
+  const handleNameKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") handleSaveName();
+    if (event.key === "Escape") {
+      setEditingName(boardName);
+      setIsEditing(false);
     }
   };
 
@@ -113,7 +148,22 @@ export function BoardHeader({
           </span>
         </div>
         <span className="hidden h-5 w-px bg-slate-200 sm:block" />
-        <p className="truncate text-sm text-slate-500">Untitled board</p>
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editingName}
+            onChange={(event) => setEditingName(event.target.value)}
+            onKeyDown={handleNameKeyDown}
+            onBlur={handleSaveName}
+            className="w-32 truncate border-b border-slate-300 bg-transparent px-1 py-0.5 text-sm text-slate-500 focus:border-teal-500 focus:outline-none sm:w-48"
+            aria-label="Board name"
+          />
+        ) : (
+          <p className="truncate cursor-pointer text-sm text-slate-500" onClick={() => { setEditingName(boardName); setIsEditing(true); }} title="Rename board">
+            {boardName}
+          </p>
+        )}
       </div>
 
       {/* Right: controls */}
@@ -215,6 +265,16 @@ export function BoardHeader({
         </button>
 
         <div className="mx-1 h-5 w-px bg-slate-200" />
+
+        <button
+          type="button"
+          onClick={onNewDocument}
+          aria-label="New document"
+          title="New document"
+          className="inline-flex h-8 items-center rounded-lg px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+        >
+          New
+        </button>
 
         {/* Import button */}
         <input

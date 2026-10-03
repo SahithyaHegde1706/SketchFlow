@@ -92,6 +92,7 @@ type BoardCanvasProps = {
   onAlignAvailabilityChange?: (canAlign: boolean, canDistribute: boolean) => void;
   onLockAvailabilityChange?: (canLock: boolean, canUnlock: boolean) => void;
   onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
+  onAutosave?: () => void;
 };
 
 export type BoardCanvasHandle = {
@@ -113,12 +114,15 @@ export type BoardCanvasHandle = {
   /** Export the full document as PNG or SVG and trigger a browser download. */
   exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string) => void;
   importDocument: (doc: SketchFlowDocumentV1) => void;
+  restoreDocument: (doc: SketchFlowDocumentV1) => void;
+  getDocumentState: () => { strokes: FreehandStroke[]; elements: WhiteboardElement[]; groups: Group[]; creationOrder: CreationRecord[] };
+  clearDocument: () => void;
   addImage?: (file: File) => void;
   startCrop: () => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onLockAvailabilityChange, onDocumentChange }, ref) => {
+  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onLockAvailabilityChange, onDocumentChange, onAutosave }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -189,6 +193,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current)
     );
     onHistoryChange?.(canUndo(historyRef.current), canRedo(historyRef.current));
+    onAutosave?.();
   };
 
   const selectionIncludes = (selections: SelectionSet, candidate: Selection) =>
@@ -279,6 +284,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       applySnapshot(snapshot);
       resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
+        onAutosave?.();
     }
   };
 
@@ -290,6 +296,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       applySnapshot(snapshot);
       resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
+        onAutosave?.();
     }
   };
 
@@ -698,6 +705,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     toggleLock: handleToggleLock,
     exportCanvas: handleExportCanvas,
     importDocument: handleImportDocument,
+    restoreDocument: handleImportDocument,
+    getDocumentState: () => ({
+      strokes: strokesRef.current,
+      elements: elementsRef.current,
+      groups: groupsRef.current,
+      creationOrder: creationOrderRef.current,
+    }),
+    clearDocument: () => {
+      strokesRef.current = [];
+      elementsRef.current = [];
+      groupsRef.current = [];
+      creationOrderRef.current = [];
+      selectionRef.current = [];
+      historyRef.current = createHistory(createSnapshot([], [], [], [], []));
+      drawCanvas();
+      onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
+      onHistoryChange?.(false, false);
+      onClipboardChange?.(false, false, false);
+    },
     startCrop: () => {
       const sel = selectionRef.current[0];
       if (selectionRef.current.length === 1 && sel.kind === "element" && sel.value.type === "image" && !sel.value.locked) {
