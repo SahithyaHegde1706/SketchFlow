@@ -27,6 +27,7 @@ import {
 import { drawFreehandStroke } from "@/canvas/renderer/freehand";
 import { drawTextElement } from "@/canvas/renderer/text";
 import { computeExportBounds } from "@/export/bounds";
+import { waitForImage } from "@/canvas/renderer/images";
 
 /** Maximum pixel dimension for any single axis of the exported PNG. */
 export const MAX_DIM = 4096;
@@ -45,7 +46,37 @@ export function exportToPng(
   backgroundColor: string,
   creationOrder: CreationRecord[] = [],
 ): void {
+  void exportToPngAsync(strokes, elements, backgroundColor, creationOrder);
+}
+
+async function exportToPngAsync(
+  strokes: FreehandStroke[],
+  elements: WhiteboardElement[],
+  backgroundColor: string,
+  creationOrder: CreationRecord[],
+): Promise<void> {
   try {
+    const orderedItems: CreationRecord[] =
+      creationOrder.length > 0
+        ? creationOrder
+        : [
+            ...strokes.map((value) => ({ kind: "stroke" as const, value })),
+            ...elements.map((value) => ({ kind: "element" as const, value })),
+          ];
+
+    // Wait for each unique source before drawing so duplicate references share one load.
+    const imageSources = new Set(
+      orderedItems.flatMap((record) =>
+        record.kind === "element" && record.value.type === "image" ? [record.value.src] : [],
+      ),
+    );
+    const imageResults = await Promise.all(
+      Array.from(imageSources, async (src) => [src, await waitForImage(src)] as const),
+    );
+    const failedImageSources = new Set(
+      imageResults.filter(([, image]) => image === null).map(([src]) => src),
+    );
+
     const bounds = computeExportBounds(strokes, elements);
 
     const logW = bounds.right - bounds.left;
@@ -78,21 +109,11 @@ export function exportToPng(
     ctx.fillRect(bounds.left, bounds.top, logW, logH);
 
     // Draw all content in canonical layer order
-    if (creationOrder && creationOrder.length > 0) {
-      for (const record of creationOrder) {
-        if (record.kind === "stroke") {
-          drawCustomStroke(ctx, record.value);
-        } else {
-          drawElement(ctx, record.value);
-        }
-      }
-    } else {
-      // Fallback if creationOrder is empty
-      for (const stroke of strokes) {
-        drawCustomStroke(ctx, stroke);
-      }
-      for (const el of elements) {
-        drawElement(ctx, el);
+    for (const record of orderedItems) {
+      if (record.kind === "stroke") {
+        drawCustomStroke(ctx, record.value);
+      } else {
+        drawElement(ctx, record.value, failedImageSources);
       }
     }
 
@@ -125,14 +146,18 @@ function drawCustomStroke(ctx: CanvasRenderingContext2D, stroke: FreehandStroke)
   drawFreehandStroke(ctx, stroke, strokeColor, strokeWidth);
 }
 
-function drawElement(ctx: CanvasRenderingContext2D, el: WhiteboardElement): void {
+function drawElement(
+  ctx: CanvasRenderingContext2D,
+  el: WhiteboardElement,
+  failedImageSources: Set<string>,
+): void {
   if (el.type === "rectangle") drawRectangle(ctx, el);
   else if (el.type === "roundedRectangle") drawRoundedRectangle(ctx, el);
   else if (el.type === "circle") drawCircle(ctx, el);
   else if (el.type === "arrow") drawArrow(ctx, el);
   else if (el.type === "line") drawLine(ctx, el);
   else if (el.type === "text") drawTextElement(ctx, el);
-  else if (el.type === "image") drawImageElement(ctx, el, () => {});
+  else if (el.type === "image" && !failedImageSources.has(el.src)) drawImageElement(ctx, el, () => {});
 }
 
 // ---------------------------------------------------------------------------
