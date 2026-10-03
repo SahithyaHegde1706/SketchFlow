@@ -20,6 +20,7 @@ import {
   drawArrow,
   drawLine,
   drawRoundedRectangle,
+  drawImageElement,
   STROKE_COLOR,
   STROKE_WIDTH,
 } from "@/canvas/renderer";
@@ -131,6 +132,7 @@ function drawElement(ctx: CanvasRenderingContext2D, el: WhiteboardElement): void
   else if (el.type === "arrow") drawArrow(ctx, el);
   else if (el.type === "line") drawLine(ctx, el);
   else if (el.type === "text") drawTextElement(ctx, el);
+  else if (el.type === "image") drawImageElement(ctx, el, () => {});
 }
 
 // ---------------------------------------------------------------------------
