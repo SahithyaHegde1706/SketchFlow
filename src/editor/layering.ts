@@ -6,13 +6,6 @@ export type LayerOperation =
   | "bring-to-front"
   | "send-to-back";
 
-export type LayerAvailability = {
-  canBringForward: boolean;
-  canSendBackward: boolean;
-  canBringToFront: boolean;
-  canSendToBack: boolean;
-};
-
 function isSelected(records: CreationRecord, selections: SelectionSet) {
   return selections.some(selection =>
     selection.kind === "group"
@@ -76,26 +69,6 @@ export function sendToBack(records: CreationRecord[], selections: SelectionSet) 
   const remaining = records.filter(record => !isSelected(record, selections));
   records.splice(0, records.length, ...selected, ...remaining);
   return true;
-}
-
-export function getLayerAvailability(
-  records: CreationRecord[],
-  selections: SelectionSet,
-): LayerAvailability {
-  const hasSelection = selections.length > 0 && records.some(record => isSelected(record, selections));
-  const canMoveForward = hasSelection && records.some((record, index) =>
-    isSelected(record, selections) && records.slice(index + 1).some(candidate => !isSelected(candidate, selections))
-  );
-  const canMoveBackward = hasSelection && records.some((record, index) =>
-    isSelected(record, selections) && records.slice(0, index).some(candidate => !isSelected(candidate, selections))
-  );
-
-  return {
-    canBringForward: canMoveForward,
-    canSendBackward: canMoveBackward,
-    canBringToFront: canMoveForward,
-    canSendToBack: canMoveBackward,
-  };
 }
 
 export function applyLayerOperation(
