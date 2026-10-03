@@ -7,7 +7,7 @@
  * Accounts for:
  * - stroke widths on all primitives
  * - rotated elements using actual rotated AABBs (corners rotated around pivot)
- * - text metrics and formatting via src/canvas/text.ts
+ * - text metrics and formatting via src/canvas/renderer/text.ts
  * - multiline text and rotated text
  * - arrowheads and line endpoints
  * - single-point freehand dots and multi-point smoothed freehand paths
@@ -16,10 +16,10 @@
  */
 
 import type { Bounds, FreehandStroke, Point, WhiteboardElement } from "@/types/canvas";
-import { getBounds, rotatePoint } from "@/canvas/geometry";
+import { getBounds, rotatePoint } from "@/canvas/geometry/geometry";
 import { getElementCenter } from "@/editor/rotation";
-import { getTextBounds } from "@/canvas/text";
-import { STROKE_WIDTH } from "@/canvas/renderer";
+import { getTextBounds } from "@/canvas/renderer/text";
+import { STROKE_WIDTH } from "@/canvas/renderer/renderer";
 
 /** Logical pixels of padding added around the content bounding box. */
 export const EXPORT_PADDING = 32;

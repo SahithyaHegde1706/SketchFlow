@@ -9,7 +9,7 @@ import type {
   Viewport,
   WhiteboardElement,
 } from "@/types/canvas";
-import { getSelectionBounds } from "@/canvas/selection";
+import { getSelectionBounds } from "@/canvas/interaction/selection";
 
 export type SnapResult = {
   snappedDeltaX: number;

@@ -1,5 +1,5 @@
 import type { FreehandStroke, WhiteboardElement, Group, SelectionSet } from "@/types/canvas";
-import { rotatePoint } from "@/canvas/geometry";
+import { rotatePoint } from "@/canvas/geometry/geometry";
 
 export function getElementCenter(element: WhiteboardElement): { x: number; y: number } {
   if (element.type === "arrow" || element.type === "line") {

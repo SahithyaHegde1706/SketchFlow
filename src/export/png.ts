@@ -23,9 +23,9 @@ import {
   drawImageElement,
   STROKE_COLOR,
   STROKE_WIDTH,
-} from "@/canvas/renderer";
-import { drawFreehandStroke } from "@/canvas/freehand";
-import { drawTextElement } from "@/canvas/text";
+} from "@/canvas/renderer/renderer";
+import { drawFreehandStroke } from "@/canvas/renderer/freehand";
+import { drawTextElement } from "@/canvas/renderer/text";
 import { computeExportBounds } from "@/export/bounds";
 
 /** Maximum pixel dimension for any single axis of the exported PNG. */

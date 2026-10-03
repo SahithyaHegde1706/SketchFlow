@@ -1,5 +1,5 @@
 import type { Bounds, CreationRecord, Group, MarqueeState, SelectionSet, WhiteboardElement } from "@/types/canvas";
-import { getSelectionBounds } from "@/canvas/selection";
+import { getSelectionBounds } from "@/canvas/interaction/selection";
 
 /**
  * Minimum logical-coordinate movement (in either axis) required to treat a

@@ -1,6 +1,6 @@
 import type { Bounds, FreehandStroke, ResizeHandle, Selection, WhiteboardElement } from "@/types/canvas";
-import { getBounds, getStrokeBounds } from "@/canvas/geometry";
-import { getSelectionBounds } from "@/canvas/selection";
+import { getBounds, getStrokeBounds } from "@/canvas/geometry/geometry";
+import { getSelectionBounds } from "@/canvas/interaction/selection";
 
 export function resizeSelection(
   selection: Selection,

@@ -17,8 +17,8 @@
  */
 
 import type { CreationRecord, FreehandStroke, WhiteboardElement } from "@/types/canvas";
-import { STROKE_COLOR, STROKE_WIDTH } from "@/canvas/renderer";
-import { getTextMetrics } from "@/canvas/text";
+import { STROKE_COLOR, STROKE_WIDTH } from "@/canvas/renderer/renderer";
+import { getTextMetrics } from "@/canvas/renderer/text";
 import { computeExportBounds } from "@/export/bounds";
 
 let cachedMeasureContext: CanvasRenderingContext2D | null = null;
@@ -135,7 +135,7 @@ function freehandToSvg(stroke: FreehandStroke, ox: number, oy: number): string |
     );
   }
 
-  // 3+ points: midpoint quadratic Bézier spline (mirrors src/canvas/freehand.ts)
+  // 3+ points: midpoint quadratic Bézier spline (mirrors src/canvas/renderer/freehand.ts)
   const first = stroke[0]!;
   const second = stroke[1]!;
   const dParts: string[] = [];
