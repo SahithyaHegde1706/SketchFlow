@@ -36,7 +36,7 @@ export function validateDocument(jsonText: string): SketchFlowDocumentV1 | null 
     const elementIds = new Set<string>();
     for (const el of data.elements) {
       if (!el || typeof el !== "object" || typeof el.id !== "string" || typeof el.type !== "string") return null;
-      if (!["rectangle", "circle", "arrow", "line", "roundedRectangle", "text"].includes(el.type)) return null;
+      if (!["rectangle", "circle", "arrow", "line", "roundedRectangle", "text", "image"].includes(el.type)) return null;
       if (!("x" in el) && !("startX" in el)) return null;
       if (elementIds.has(el.id)) return null; // duplicate ID
       elementIds.add(el.id);
@@ -89,7 +89,8 @@ export function exportToSketchFlowDocument(
   elements: WhiteboardElement[],
   groups: Group[],
   creationOrder: CreationRecord[],
-  canvasSettings: CanvasSettings
+  canvasSettings: CanvasSettings,
+  name?: string
 ): void {
   try {
     // Serialize creationOrder without duplicating the full object data
@@ -105,6 +106,7 @@ export function exportToSketchFlowDocument(
     const doc: SketchFlowDocumentV1 = {
       version: 1,
       type: "sketchflow-document",
+      name: name || undefined,
       canvasSettings,
       strokes,
       elements,
