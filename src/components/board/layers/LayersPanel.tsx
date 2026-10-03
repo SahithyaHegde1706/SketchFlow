@@ -176,11 +176,11 @@ export function LayersPanel({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between p-3 border-b border-slate-100">
-        <h2 className="text-sm font-semibold text-slate-800">Layers</h2>
+      <div className="flex items-center justify-between p-3 border-b border-slate-100 dark:border-slate-700">
+        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Layers</h2>
         <button
           onClick={onClose}
-          className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+          className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-500 dark:hover:text-slate-300 dark:hover:bg-slate-700"
           aria-label="Close layers panel"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -189,21 +189,21 @@ export function LayersPanel({
         </button>
       </div>
 
-      <div className="flex gap-1 p-2 border-b border-slate-100 justify-center">
-        <button onClick={() => onLayerOperation("bring-to-front")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100" title="Bring to Front">
+      <div className="flex gap-1 p-2 border-b border-slate-100 justify-center dark:border-slate-700">
+        <button onClick={() => onLayerOperation("bring-to-front")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700" title="Bring to Front">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
         </button>
-        <button onClick={() => onLayerOperation("bring-forward")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100" title="Bring Forward">
+        <button onClick={() => onLayerOperation("bring-forward")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700" title="Bring Forward">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 15V9M9 12l3-3 3 3"/></svg>
         </button>
-        <button onClick={() => onLayerOperation("send-backward")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100" title="Send Backward">
+        <button onClick={() => onLayerOperation("send-backward")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700" title="Send Backward">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 9v6M9 12l3 3 3-3"/></svg>
         </button>
-        <button onClick={() => onLayerOperation("send-to-back")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100" title="Send to Back">
+        <button onClick={() => onLayerOperation("send-to-back")} className="p-1.5 rounded bg-slate-50 text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700" title="Send to Back">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
         </button>
-        <div className="w-px bg-slate-200 mx-1" />
-        <button onClick={onDelete} className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100" title="Delete">
+        <div className="w-px bg-slate-200 mx-1 dark:bg-slate-700" />
+        <button onClick={onDelete} className="p-1.5 rounded bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50" title="Delete">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
         </button>
       </div>
@@ -213,7 +213,7 @@ export function LayersPanel({
           <LayerNodeView key={node.id} node={node} onToggle={toggleGroup} onSelect={handleSelectNode} onToggleLock={handleToggleLockNode} />
         ))}
         {nodes.length === 0 && (
-          <div className="text-center text-xs text-slate-400 mt-8">No layers</div>
+          <div className="text-center text-xs text-slate-400 mt-8 dark:text-slate-500">No layers</div>
         )}
       </div>
     </div>
@@ -235,15 +235,15 @@ function LayerNodeView({
 }) {
   return (
     <>
-      <div 
+      <div
         className={`group flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm select-none
-          ${node.isSelected ? 'bg-teal-50 text-teal-900 font-medium' : 'hover:bg-slate-50 text-slate-700'}
+          ${node.isSelected ? 'bg-teal-50 text-teal-900 font-medium dark:bg-teal-900/30 dark:text-teal-300' : 'hover:bg-slate-50 text-slate-700 dark:hover:bg-slate-800 dark:text-slate-300'}
         `}
         style={{ paddingLeft: `${0.5 + depth * 1.25}rem` }}
         onClick={(e) => onSelect(node, e)}
       >
         {node.type === "group" ? (
-          <button onClick={(e) => onToggle(node.id, e)} className="p-0.5 -ml-1 text-slate-400 hover:text-slate-600 focus:outline-none">
+          <button onClick={(e) => onToggle(node.id, e)} className="p-0.5 -ml-1 text-slate-400 hover:text-slate-600 focus:outline-none dark:text-slate-500 dark:hover:text-slate-300">
              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`transform transition-transform ${node.isExpanded ? 'rotate-90' : ''}`}>
                <path d="M9 18l6-6-6-6" />
              </svg>
@@ -251,8 +251,8 @@ function LayerNodeView({
         ) : (
           <div className="w-3.5 shrink-0" />
         )}
-        
-        <span className="text-slate-400 shrink-0">
+
+        <span className="text-slate-400 shrink-0 dark:text-slate-500">
           {node.type === "group" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>}
           {node.type === "stroke" && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>}
           {node.type === "element" && node.label.startsWith("Rect") && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>}
@@ -270,8 +270,8 @@ function LayerNodeView({
           aria-label={node.isLocked ? "Unlock layer" : "Lock layer"}
           className={`p-1 rounded transition shrink-0 ${
             node.isLocked
-              ? "text-red-500 hover:bg-red-50"
-              : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-600 hover:bg-slate-100"
+              ? "text-red-500 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30"
+              : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-slate-600 hover:bg-slate-100 dark:text-slate-600 dark:hover:text-slate-300 dark:hover:bg-slate-700"
           }`}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -280,7 +280,7 @@ function LayerNodeView({
           </svg>
         </button>
       </div>
-      
+
       {node.isExpanded && node.children?.map(child => (
         <LayerNodeView key={child.id} node={child} onToggle={onToggle} onSelect={onSelect} onToggleLock={onToggleLock} depth={depth + 1} />
       ))}
