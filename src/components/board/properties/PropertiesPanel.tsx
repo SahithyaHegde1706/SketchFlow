@@ -81,7 +81,7 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                   ...canvasSettings,
                   gridSize: size,
                   snapSettings: {
-                    ...(canvasSettings.snapSettings || { enabled: true, gridEnabled: false, threshold: 6 }),
+                    ...canvasSettings.snapSettings,
                     gridSize: size,
                   },
                 });
@@ -107,7 +107,7 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                   onChange={(e) => onUpdateCanvasSettings({
                     ...canvasSettings,
                     snapSettings: {
-                      ...(canvasSettings.snapSettings || { gridEnabled: false, gridSize: 16, threshold: 6 }),
+                      ...canvasSettings.snapSettings,
                       enabled: e.target.checked,
                     },
                   })}
@@ -126,7 +126,7 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
                   onChange={(e) => onUpdateCanvasSettings({
                     ...canvasSettings,
                     snapSettings: {
-                      ...(canvasSettings.snapSettings || { enabled: true, gridSize: 16, threshold: 6 }),
+                      ...canvasSettings.snapSettings,
                       gridEnabled: e.target.checked,
                     },
                   })}

@@ -238,6 +238,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current)
     );
     onHistoryChange?.(canUndo(historyRef.current), canRedo(historyRef.current));
+    onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
     onAutosave?.();
   };
 
@@ -335,6 +336,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasSettings,
       handleImageLoaded,
     );
+    onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
   };
 
   const handleUndo = () => {
@@ -513,27 +515,42 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const handleDeleteSelection = () => {
     const toDelete = selectionRef.current.filter(sel => !isItemLocked(sel, elementsRef.current));
     if (toDelete.length > 0) {
+      const deletedElementIds = new Set<string>();
+      const deletedGroupIds = new Set<string>();
+      const deletedStrokes = new Set<FreehandStroke>();
+
       for (const selection of toDelete) {
         if (selection.kind === "stroke") {
-          removeByReference(strokesRef.current, selection.value);
+          deletedStrokes.add(selection.value);
         } else if (selection.kind === "group") {
-          selection.value.elementIds.forEach(id => {
-            const element = elementsRef.current.find(e => e.id === id);
-            if (element) {
-              removeByReference(elementsRef.current, element);
-            }
-          });
-          groupsRef.current = groupsRef.current.filter(g => g.id !== selection.value.id);
+          deletedGroupIds.add(selection.value.id);
+          selection.value.elementIds.forEach(id => deletedElementIds.add(id));
         } else {
-          removeByReference(elementsRef.current, selection.value);
-          removeElementFromGroups(selection.value.id, groupsRef.current);
+          deletedElementIds.add(selection.value.id);
         }
       }
-      creationOrderRef.current = creationOrderRef.current.filter(record => !selectionIncludes(toDelete, record as Selection));
-      selectionRef.current = selectionRef.current.filter(sel => isItemLocked(sel, elementsRef.current));
+
+      strokesRef.current = strokesRef.current.filter(stroke => !deletedStrokes.has(stroke));
+      elementsRef.current = elementsRef.current.filter(element => !deletedElementIds.has(element.id));
+      for (const group of groupsRef.current) {
+        group.elementIds = group.elementIds.filter(id => !deletedElementIds.has(id));
+      }
+      groupsRef.current = groupsRef.current.filter(group =>
+        !deletedGroupIds.has(group.id) && group.elementIds.length >= 2,
+      );
+      creationOrderRef.current = creationOrderRef.current.filter(record =>
+        record.kind === "stroke"
+          ? !deletedStrokes.has(record.value)
+          : !deletedElementIds.has(record.value.id),
+      );
+      selectionRef.current = selectionRef.current.filter(selection => {
+        if (selection.kind === "stroke") return !deletedStrokes.has(selection.value);
+        if (selection.kind === "element") return !deletedElementIds.has(selection.value.id);
+        return !deletedGroupIds.has(selection.value.id) && groupsRef.current.some(group => group.id === selection.value.id);
+      });
       drawCanvas();
       addHistory();
-      }
+    }
   };
 
   const handleUpdateProperties = (updates: Partial<WhiteboardElement>, commitHistory: boolean = true) => {
@@ -700,6 +717,27 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       groupsRef.current = [];
       creationOrderRef.current = [];
       selectionRef.current = [];
+      dragRef.current = null;
+      multiDragRef.current = null;
+      rotationRef.current = null;
+      activeStrokeRef.current = null;
+      activeRectangleRef.current = null;
+      activeRectangleStartRef.current = null;
+      activeCircleRef.current = null;
+      activeCircleStartRef.current = null;
+      activeArrowRef.current = null;
+      activeArrowStartRef.current = null;
+      activeLineRef.current = null;
+      activeLineStartRef.current = null;
+      activeRoundedRectangleRef.current = null;
+      activeRoundedRectangleStartRef.current = null;
+      marqueeRef.current = null;
+      cropRef.current = null;
+      setIsCropping(false);
+      setTextEditor(null);
+      clipboardRef.current = { item: null };
+      resetDuplicateState(duplicateStateRef.current);
+      alignmentGuidesRef.current = [];
       historyRef.current = createHistory(
         createSnapshot(
           strokesRef.current,
@@ -709,16 +747,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           groupsRef.current,
         ),
       );
-      renderCanvas(
-        canvasRef.current,
-        strokesRef.current,
-        elementsRef.current,
-        null,
-        selectionRef.current,
-        viewportRef.current,
-        canvasSettings,
-        handleImageLoaded
-      );
+      drawCanvas();
       onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
       onHistoryChange?.(false, false);
       onClipboardChange?.(false, false, false);

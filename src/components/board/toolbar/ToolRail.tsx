@@ -108,7 +108,7 @@ export function ToolRail({
             aria-label="Background Color"
             title="Background Color"
             value={canvasSettings.backgroundColor}
-            onChange={(event) => onUpdateCanvasSettings({ ...canvasSettings, backgroundColor: event.target.value })}
+            onChange={(event) => onUpdateCanvasSettings({ ...canvasSettings, backgroundColor: event.target.value, backgroundMode: "custom" })}
             className="absolute inset-0 size-full cursor-pointer opacity-0"
           />
         </label>
