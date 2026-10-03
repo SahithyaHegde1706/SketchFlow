@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+import { SketchFlowLogo } from "@/components/brand/SketchFlowLogo";
 
 type BoardHeaderProps = {
   boardName: string;
@@ -10,8 +11,6 @@ type BoardHeaderProps = {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
-  activePanel: "layers" | "properties" | null;
-  onTogglePanel: (panel: "layers" | "properties") => void;
   /** Called when the user clicks Export PNG. */
   onExportPng?: () => void;
   /** Called when the user clicks Export SVG. */
@@ -28,8 +27,6 @@ export function BoardHeader({
   canRedo = false,
   onUndo,
   onRedo,
-  activePanel,
-  onTogglePanel,
   onExportPng,
   onExportSvg,
   onExportSketchFlow,
@@ -110,14 +107,7 @@ export function BoardHeader({
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7 dark:bg-slate-900/90 dark:border-slate-700/80">
       {/* Left: logo + board name */}
       <div className="flex min-w-0 items-center gap-4">
-        <div className="flex items-center gap-2.5">
-          <span className="flex size-8 items-center justify-center rounded-xl bg-teal-600 text-sm font-bold text-white shadow-sm shadow-teal-600/20">
-            S
-          </span>
-          <span className="text-[15px] font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-            SketchFlow
-          </span>
-        </div>
+        <SketchFlowLogo href="/" />
         <span className="hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-700" />
         {isEditing ? (
           <input
@@ -208,24 +198,6 @@ export function BoardHeader({
 
         <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-        <button
-          type="button"
-          onClick={() => onTogglePanel("properties")}
-          aria-label={activePanel === "properties" ? "Close edit panel" : "Open edit panel"}
-          title="Edit selection and canvas settings"
-          className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition ${
-            activePanel === "properties"
-              ? "bg-teal-50 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-          }`}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 20h9"/>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-          <span className="hidden sm:inline">Edit</span>
-        </button>
-        <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
         <button
           type="button"
           onClick={onNewDocument}
