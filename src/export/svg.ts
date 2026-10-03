@@ -244,8 +244,7 @@ function elementToSvg(
   }
 
   if (el.type === "image") {
-    // If it has flips, we must wrap it in a group with the flip transform
-    const rotStr = rot ? ` ${rot}` : "";
+    // Apply flip and rotation together about the image center on one group.
     const opacityAttr = el.opacity !== undefined ? ` opacity="${el.opacity}"` : "";
     const hasBorder = el.strokeWidth && el.strokeWidth > 0 && el.strokeColor;
     const radius = el.cornerRadius ?? 0;
@@ -258,8 +257,8 @@ function elementToSvg(
       const cy = el.y + el.height / 2 + oy;
       const sx = el.flipX ? -1 : 1;
       const sy = el.flipY ? -1 : 1;
-      // We translate to center, scale, translate back
-      const flipTransform = `transform="translate(${cx}, ${cy}) scale(${sx}, ${sy}) translate(${-cx}, ${-cy})"`;
+      const rotationDegrees = (el.rotation ?? 0) * (180 / Math.PI);
+      const transform = `translate(${f(cx)}, ${f(cy)}) rotate(${f(rotationDegrees)}) scale(${sx}, ${sy}) translate(${f(-cx)}, ${f(-cy)})`;
       
       let content = "";
       const clipId = `clip-${crypto.randomUUID()}`;
@@ -285,7 +284,7 @@ function elementToSvg(
       }
       
       return (
-        `<g ${flipTransform}${rotStr}${opacityAttr}>` +
+        `<g transform="${transform}"${opacityAttr}>` +
         content +
         `</g>`
       );

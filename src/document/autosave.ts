@@ -1,7 +1,8 @@
 /**
  * Autosave and Local Persistence — Step 48
  *
- * Automatically persists the current SketchFlow document to localStorage.
+ * Persists the current SketchFlow document to IndexedDB, with a size-limited
+ * localStorage fallback/cache for small documents and legacy compatibility.
  * Reuses existing SketchFlow serialization/deserialization logic.
  */
 
@@ -15,7 +16,66 @@ import type {
 import type { SerializedCreationRecord, SketchFlowDocumentV1 } from "./types";
 
 const AUTOSAVE_KEY = "sketchflow-autosave";
+const DATABASE_NAME = "sketchflow-storage";
+const DATABASE_VERSION = 1;
+const DOCUMENT_STORE = "documents";
+const DOCUMENT_ID = "autosave";
 const AUTOSAVE_DEBOUNCE_MS = 1000; // 1 second debounce
+const LOCAL_STORAGE_MAX_SIZE = 4.5 * 1024 * 1024;
+let databasePromise: Promise<IDBDatabase> | null = null;
+let saveQueue: Promise<void> = Promise.resolve();
+
+function openAutosaveDatabase(): Promise<IDBDatabase> {
+  if (databasePromise) return databasePromise;
+  databasePromise = new Promise<IDBDatabase>((resolve, reject) => {
+    if (typeof indexedDB === "undefined") {
+      reject(new Error("IndexedDB is unavailable in this browser."));
+      return;
+    }
+    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(DOCUMENT_STORE)) {
+        request.result.createObjectStore(DOCUMENT_STORE);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Could not open document storage."));
+    request.onblocked = () => reject(new Error("Document storage upgrade is blocked by another tab."));
+  }).catch((error: unknown) => {
+    databasePromise = null;
+    throw error;
+  });
+  return databasePromise!;
+}
+
+function writeToIndexedDB(doc: SketchFlowDocumentV1): Promise<void> {
+  return openAutosaveDatabase().then(database => new Promise((resolve, reject) => {
+    const transaction = database.transaction(DOCUMENT_STORE, "readwrite");
+    transaction.objectStore(DOCUMENT_STORE).put(doc, DOCUMENT_ID);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error("Document storage write failed."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Document storage write was aborted."));
+  }));
+}
+
+function readFromIndexedDB(): Promise<unknown | null> {
+  return openAutosaveDatabase().then(database => new Promise((resolve, reject) => {
+    const transaction = database.transaction(DOCUMENT_STORE, "readonly");
+    const request = transaction.objectStore(DOCUMENT_STORE).get(DOCUMENT_ID);
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => reject(request.error ?? new Error("Document storage read failed."));
+  }));
+}
+
+function removeFromIndexedDB(): Promise<void> {
+  return openAutosaveDatabase().then(database => new Promise((resolve, reject) => {
+    const transaction = database.transaction(DOCUMENT_STORE, "readwrite");
+    transaction.objectStore(DOCUMENT_STORE).delete(DOCUMENT_ID);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error("Document storage delete failed."));
+    transaction.onabort = () => reject(transaction.error ?? new Error("Document storage delete was aborted."));
+  }));
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -31,7 +91,7 @@ function isValidDocument(data: unknown): data is SketchFlowDocumentV1 {
   if (!Array.isArray(data.strokes) || !Array.isArray(data.elements) || !Array.isArray(data.groups) || !Array.isArray(data.creationOrder)) return false;
   const strokeCount = data.strokes.length;
 
-  if (!isRecord(data.canvasSettings) || typeof data.canvasSettings.backgroundColor !== "string" || typeof data.canvasSettings.showGrid !== "boolean" || !isFiniteNumber(data.canvasSettings.gridSize) || data.canvasSettings.gridSize <= 0) return false;
+  if (!isRecord(data.canvasSettings) || typeof data.canvasSettings.backgroundColor !== "string" || (data.canvasSettings.backgroundMode !== undefined && data.canvasSettings.backgroundMode !== "theme-default" && data.canvasSettings.backgroundMode !== "custom") || typeof data.canvasSettings.showGrid !== "boolean" || !isFiniteNumber(data.canvasSettings.gridSize) || data.canvasSettings.gridSize <= 0) return false;
   const snapSettings = data.canvasSettings.snapSettings;
   if (!isRecord(snapSettings) || typeof snapSettings.enabled !== "boolean" || typeof snapSettings.gridEnabled !== "boolean" || !isFiniteNumber(snapSettings.gridSize) || snapSettings.gridSize <= 0 || !isFiniteNumber(snapSettings.threshold)) return false;
 
@@ -82,8 +142,9 @@ function isValidDocument(data: unknown): data is SketchFlowDocumentV1 {
 }
 
 /**
- * Save the current document to localStorage.
- * Returns true if successful, false otherwise.
+ * Save the current document to browser storage.
+ * IndexedDB is the primary store; localStorage remains a protected small-document fallback.
+ * Returns true if at least one store accepted the current document.
  */
 export function saveToLocalStorage(
   strokes: FreehandStroke[],
@@ -92,53 +153,92 @@ export function saveToLocalStorage(
   creationOrder: CreationRecord[],
   canvasSettings: CanvasSettings,
   name?: string
-): boolean {
-  try {
-    // Serialize creationOrder without duplicating the full object data
-    const serializedOrder: SerializedCreationRecord[] = creationOrder.map((record) => {
-      if (record.kind === "stroke") {
-        const index = strokes.indexOf(record.value);
-        return { kind: "stroke", index: index >= 0 ? index : strokes.length };
-      } else {
+): Promise<boolean> {
+  const saveTask = saveQueue.then(async () => {
+    let doc: SketchFlowDocumentV1;
+    let json: string;
+    let dataSize: number;
+    try {
+      // Serialize creationOrder without duplicating the full object data.
+      const serializedOrder: SerializedCreationRecord[] = creationOrder.map((record) => {
+        if (record.kind === "stroke") {
+          const index = strokes.indexOf(record.value);
+          return { kind: "stroke", index: index >= 0 ? index : strokes.length };
+        }
         return { kind: "element", id: record.value.id };
-      }
-    });
+      });
 
-    const doc: SketchFlowDocumentV1 = {
-      version: 1,
-      type: "sketchflow-document",
-      name: name || undefined,
-      canvasSettings,
-      strokes,
-      elements,
-      groups,
-      creationOrder: serializedOrder,
-    };
+      doc = {
+        version: 1,
+        type: "sketchflow-document",
+        name: name || undefined,
+        canvasSettings,
+        strokes,
+        elements,
+        groups,
+        creationOrder: serializedOrder,
+      };
 
-    const json = JSON.stringify(doc);
-    
-    // Check if the data is too large for localStorage (typically ~5MB limit)
-    const dataSize = new Blob([json]).size;
-    const maxSize = 4.5 * 1024 * 1024; // 4.5MB to leave some margin
-    
-    if (dataSize > maxSize) {
-      console.warn("[SketchFlow] Autosave skipped: document too large for localStorage", dataSize);
+      json = JSON.stringify(doc);
+      dataSize = new Blob([json]).size;
+    } catch (err) {
+      console.error("[SketchFlow] Autosave serialization failed:", err);
       return false;
     }
 
-    localStorage.setItem(AUTOSAVE_KEY, json);
+    let indexedDbSaved = false;
+    try {
+      await writeToIndexedDB(doc);
+      indexedDbSaved = true;
+    } catch (err) {
+      console.error("[SketchFlow] IndexedDB autosave failed (including possible storage quota exhaustion):", err);
+    }
+
+    let localStorageSaved = false;
+    try {
+      if (dataSize <= LOCAL_STORAGE_MAX_SIZE) {
+        localStorage.setItem(AUTOSAVE_KEY, json);
+        localStorageSaved = true;
+      } else {
+        // A larger document is stored in IndexedDB; remove any older small cache
+        // so it cannot be mistaken for the latest version if storage is unavailable.
+        localStorage.removeItem(AUTOSAVE_KEY);
+      }
+    } catch (err) {
+      console.warn("[SketchFlow] Local storage cache unavailable:", err);
+    }
+
+    if (!indexedDbSaved && localStorageSaved) {
+      try {
+        await removeFromIndexedDB();
+      } catch (err) {
+        // A failed/unavailable database is ignored by restore, which then uses the fresh local cache.
+        console.warn("[SketchFlow] Could not clear an older IndexedDB autosave:", err);
+      }
+    }
+
+    if (!indexedDbSaved && !localStorageSaved) {
+      console.error("[SketchFlow] Autosave failed: browser storage could not persist this document.");
+      return false;
+    }
     return true;
-  } catch (err) {
-    console.error("[SketchFlow] Autosave failed:", err);
-    return false;
-  }
+  });
+  saveQueue = saveTask.then(() => undefined, () => undefined);
+  return saveTask;
 }
 
 /**
- * Load the autosaved document from localStorage.
+ * Load the autosaved document, preferring IndexedDB and falling back to localStorage.
  * Returns the document if valid, null otherwise.
  */
-export function loadFromLocalStorage(): SketchFlowDocumentV1 | null {
+export async function loadFromLocalStorage(): Promise<SketchFlowDocumentV1 | null> {
+  try {
+    const data = await readFromIndexedDB();
+    if (isValidDocument(data)) return data;
+  } catch (err) {
+    console.warn("[SketchFlow] IndexedDB restore unavailable; checking legacy local storage:", err);
+  }
+
   try {
     const json = localStorage.getItem(AUTOSAVE_KEY);
     if (!json) return null;
@@ -152,9 +252,14 @@ export function loadFromLocalStorage(): SketchFlowDocumentV1 | null {
 }
 
 /**
- * Clear the autosaved document from localStorage.
+ * Clear the autosaved document from both browser stores.
  */
-export function clearAutosave(): void {
+export async function clearAutosave(): Promise<void> {
+  try {
+    await removeFromIndexedDB();
+  } catch (err) {
+    console.error("[SketchFlow] Failed to clear IndexedDB autosave:", err);
+  }
   try {
     localStorage.removeItem(AUTOSAVE_KEY);
   } catch (err) {
@@ -165,7 +270,12 @@ export function clearAutosave(): void {
 /**
  * Check if there is an autosaved document available.
  */
-export function hasAutosave(): boolean {
+export async function hasAutosave(): Promise<boolean> {
+  try {
+    if (isValidDocument(await readFromIndexedDB())) return true;
+  } catch (err) {
+    console.warn("[SketchFlow] Could not inspect IndexedDB autosave:", err);
+  }
   try {
     return localStorage.getItem(AUTOSAVE_KEY) !== null;
   } catch (err) {
@@ -178,7 +288,7 @@ export function hasAutosave(): boolean {
  * Create a debounced autosave function.
  */
 export function createDebouncedAutosave(
-  saveFn: () => void,
+  saveFn: () => void | Promise<unknown>,
   delay: number = AUTOSAVE_DEBOUNCE_MS
 ): () => void {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -188,7 +298,7 @@ export function createDebouncedAutosave(
       clearTimeout(timeoutId);
     }
     timeoutId = setTimeout(() => {
-      saveFn();
+      void saveFn();
       timeoutId = null;
     }, delay);
   };
