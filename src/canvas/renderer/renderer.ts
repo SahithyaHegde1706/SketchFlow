@@ -14,14 +14,34 @@ import type {
   ImageElement,
   CropState,
 } from "@/types/canvas";
-import { drawSelection } from "./selection";
+import { drawSelection } from "../interaction/selection";
 import { drawTextElement } from "./text";
 import { drawFreehandStroke } from "./freehand";
 import { getOrLoadImage } from "./images";
 
 export const STROKE_COLOR = "#0f172a";
+export const STROKE_COLOR_DARK = "#e2e8f0";
 export const STROKE_WIDTH = 3;
 export const TEXT_FONT_SIZE = 20;
+
+/**
+ * Check if a color is dark by calculating its luminance.
+ * Returns true if the color is considered dark (luminance < 128).
+ */
+function isDarkColor(color: string): boolean {
+  // Remove # if present
+  const hex = color.replace('#', '');
+
+  // Parse hex to RGB
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+
+  // Calculate luminance using the standard formula
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+
+  return luminance < 128;
+}
 
 export function drawAlignmentGuides(
   context: CanvasRenderingContext2D,
@@ -78,6 +98,11 @@ export function renderCanvas(
   context.fillStyle = settings.backgroundColor;
   context.fillRect(0, 0, bounds.width, bounds.height);
 
+  // Determine stroke color based on background (for demo elements without custom colors)
+  // Use a brightness check to detect dark backgrounds more robustly
+  const isDarkBackground = isDarkColor(settings.backgroundColor);
+  const adaptiveStrokeColor = isDarkBackground ? STROKE_COLOR_DARK : STROKE_COLOR;
+
   context.save();
   context.translate(viewport.offsetX, viewport.offsetY);
   context.scale(viewport.scale, viewport.scale);
@@ -110,20 +135,20 @@ export function renderCanvas(
   }
 
   for (const stroke of strokes) {
-    drawStroke(context, stroke);
+    drawStroke(context, stroke, adaptiveStrokeColor);
   }
 
   for (const element of elements) {
     if (element.type === "rectangle") {
-      drawRectangle(context, element);
+      drawRectangle(context, element, adaptiveStrokeColor);
     } else if (element.type === "roundedRectangle") {
-      drawRoundedRectangle(context, element);
+      drawRoundedRectangle(context, element, adaptiveStrokeColor);
     } else if (element.type === "circle") {
-      drawCircle(context, element);
+      drawCircle(context, element, adaptiveStrokeColor);
     } else if (element.type === "arrow") {
-      drawArrow(context, element);
+      drawArrow(context, element, adaptiveStrokeColor);
     } else if (element.type === "line") {
-      drawLine(context, element);
+      drawLine(context, element, adaptiveStrokeColor);
     } else if (element.type === "image") {
       drawImageElement(context, element, onImageLoaded ?? (() => {}));
     } else {
@@ -133,15 +158,15 @@ export function renderCanvas(
 
   if (previewElement) {
     if (previewElement.type === "rectangle") {
-      drawRectangle(context, previewElement);
+      drawRectangle(context, previewElement, adaptiveStrokeColor);
     } else if (previewElement.type === "roundedRectangle") {
-      drawRoundedRectangle(context, previewElement);
+      drawRoundedRectangle(context, previewElement, adaptiveStrokeColor);
     } else if (previewElement.type === "circle") {
-      drawCircle(context, previewElement);
+      drawCircle(context, previewElement, adaptiveStrokeColor);
     } else if (previewElement.type === "arrow") {
-      drawArrow(context, previewElement);
+      drawArrow(context, previewElement, adaptiveStrokeColor);
     } else if (previewElement.type === "line") {
-      drawLine(context, previewElement);
+      drawLine(context, previewElement, adaptiveStrokeColor);
     } else if (previewElement.type === "image") {
       drawImageElement(context, previewElement, () => {});
     } else if (previewElement.type === "text") {
@@ -160,8 +185,8 @@ export function renderCanvas(
   context.restore();
 }
 
-export function drawStroke(context: CanvasRenderingContext2D, stroke: FreehandStroke) {
-  drawFreehandStroke(context, stroke, STROKE_COLOR, STROKE_WIDTH);
+export function drawStroke(context: CanvasRenderingContext2D, stroke: FreehandStroke, strokeColor?: string) {
+  drawFreehandStroke(context, stroke, strokeColor || STROKE_COLOR, STROKE_WIDTH);
 }
 
 export function drawImageElement(
@@ -173,6 +198,9 @@ export function drawImageElement(
   if (!img) return; // not loaded yet
 
   context.save();
+  const opacity = image.opacity ?? 1;
+  context.globalAlpha = opacity;
+  
   if (image.rotation) {
     const cx = image.x + image.width / 2;
     const cy = image.y + image.height / 2;
@@ -188,7 +216,83 @@ export function drawImageElement(
     context.translate(-cx, -cy);
   }
   
+  // Apply shadow if specified
+  if (image.shadowColor !== undefined) {
+    context.shadowColor = image.shadowColor;
+    context.shadowBlur = image.shadowBlur ?? 10;
+    context.shadowOffsetX = image.shadowOffsetX ?? 5;
+    context.shadowOffsetY = image.shadowOffsetY ?? 5;
+  }
+  
+  // Clip to rounded rectangle if cornerRadius is specified
+  const radius = image.cornerRadius ?? 0;
+  if (radius > 0) {
+    context.beginPath();
+    if (typeof context.roundRect === "function") {
+      context.roundRect(image.x, image.y, image.width, image.height, radius);
+    } else {
+      // Fallback for browsers without roundRect support
+      const r = Math.min(radius, image.width / 2, image.height / 2);
+      const x = image.x;
+      const y = image.y;
+      const w = image.width;
+      const h = image.height;
+      context.moveTo(x + r, y);
+      context.lineTo(x + w - r, y);
+      context.quadraticCurveTo(x + w, y, x + w, y + r);
+      context.lineTo(x + w, y + h - r);
+      context.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      context.lineTo(x + r, y + h);
+      context.quadraticCurveTo(x, y + h, x, y + h - r);
+      context.lineTo(x, y + r);
+      context.quadraticCurveTo(x, y, x + r, y);
+      context.closePath();
+    }
+    context.clip();
+  }
+  
   context.drawImage(img, image.x, image.y, image.width, image.height);
+  
+  // Reset shadow before drawing border to avoid shadow on border
+  context.shadowColor = "transparent";
+  context.shadowBlur = 0;
+  context.shadowOffsetX = 0;
+  context.shadowOffsetY = 0;
+  
+  // Draw border if specified
+  if (image.strokeWidth && image.strokeWidth > 0 && image.strokeColor) {
+    context.strokeStyle = image.strokeColor;
+    context.lineWidth = image.strokeWidth;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    if (radius > 0) {
+      // Draw rounded border
+      context.beginPath();
+      if (typeof context.roundRect === "function") {
+        context.roundRect(image.x, image.y, image.width, image.height, radius);
+      } else {
+        const r = Math.min(radius, image.width / 2, image.height / 2);
+        const x = image.x;
+        const y = image.y;
+        const w = image.width;
+        const h = image.height;
+        context.moveTo(x + r, y);
+        context.lineTo(x + w - r, y);
+        context.quadraticCurveTo(x + w, y, x + w, y + r);
+        context.lineTo(x + w, y + h - r);
+        context.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        context.lineTo(x + r, y + h);
+        context.quadraticCurveTo(x, y + h, x, y + h - r);
+        context.lineTo(x, y + r);
+        context.quadraticCurveTo(x, y, x + r, y);
+        context.closePath();
+      }
+      context.stroke();
+    } else {
+      // Draw rectangular border
+      context.strokeRect(image.x, image.y, image.width, image.height);
+    }
+  }
   
   context.restore();
 }
@@ -196,6 +300,7 @@ export function drawImageElement(
 export function drawRectangle(
   context: CanvasRenderingContext2D,
   rectangle: RectangleElement,
+  adaptiveStrokeColor?: string,
 ) {
   context.save();
   if (rectangle.rotation) {
@@ -205,21 +310,22 @@ export function drawRectangle(
     context.rotate(rectangle.rotation);
     context.translate(-cx, -cy);
   }
-  context.strokeStyle = rectangle.strokeColor;
+  // Use adaptive color if element has default stroke color
+  context.strokeStyle = (rectangle.strokeColor === STROKE_COLOR && adaptiveStrokeColor) ? adaptiveStrokeColor : rectangle.strokeColor;
   context.lineWidth = rectangle.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
-  
+
   if (rectangle.fillColor && rectangle.fillColor !== "transparent" && rectangle.fillColor !== "none") {
     context.fillStyle = rectangle.fillColor;
     context.fillRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
   }
-  
+
   context.strokeRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height);
   context.restore();
 }
 
-export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElement) {
+export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElement, adaptiveStrokeColor?: string) {
   context.save();
   if (circle.rotation) {
     const cx = circle.x + circle.width / 2;
@@ -228,7 +334,8 @@ export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElem
     context.rotate(circle.rotation);
     context.translate(-cx, -cy);
   }
-  context.strokeStyle = circle.strokeColor;
+  // Use adaptive color if element has default stroke color
+  context.strokeStyle = (circle.strokeColor === STROKE_COLOR && adaptiveStrokeColor) ? adaptiveStrokeColor : circle.strokeColor;
   context.lineWidth = circle.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -242,7 +349,7 @@ export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElem
     0,
     Math.PI * 2,
   );
-  
+
   if (circle.fillColor && circle.fillColor !== "transparent" && circle.fillColor !== "none") {
     context.fillStyle = circle.fillColor;
     context.fill();
@@ -252,7 +359,7 @@ export function drawCircle(context: CanvasRenderingContext2D, circle: CircleElem
   context.restore();
 }
 
-export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement) {
+export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement, adaptiveStrokeColor?: string) {
   context.save();
   if (arrow.rotation) {
     const cx = (arrow.startX + arrow.endX) / 2;
@@ -265,7 +372,8 @@ export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement
   const arrowheadLength = 12;
   const arrowheadAngle = Math.PI / 7;
 
-  context.strokeStyle = arrow.strokeColor;
+  // Use adaptive color if element has default stroke color
+  context.strokeStyle = (arrow.strokeColor === STROKE_COLOR && adaptiveStrokeColor) ? adaptiveStrokeColor : arrow.strokeColor;
   context.lineWidth = arrow.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -285,7 +393,7 @@ export function drawArrow(context: CanvasRenderingContext2D, arrow: ArrowElement
   context.restore();
 }
 
-export function drawLine(context: CanvasRenderingContext2D, line: LineElement) {
+export function drawLine(context: CanvasRenderingContext2D, line: LineElement, adaptiveStrokeColor?: string) {
   context.save();
   if (line.rotation) {
     const cx = (line.startX + line.endX) / 2;
@@ -294,8 +402,9 @@ export function drawLine(context: CanvasRenderingContext2D, line: LineElement) {
     context.rotate(line.rotation);
     context.translate(-cx, -cy);
   }
-  
-  context.strokeStyle = line.strokeColor;
+
+  // Use adaptive color if element has default stroke color
+  context.strokeStyle = (line.strokeColor === STROKE_COLOR && adaptiveStrokeColor) ? adaptiveStrokeColor : line.strokeColor;
   context.lineWidth = line.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
@@ -309,6 +418,7 @@ export function drawLine(context: CanvasRenderingContext2D, line: LineElement) {
 export function drawRoundedRectangle(
   context: CanvasRenderingContext2D,
   rectangle: RoundedRectangleElement,
+  adaptiveStrokeColor?: string,
 ) {
   context.save();
   if (rectangle.rotation) {
@@ -318,11 +428,12 @@ export function drawRoundedRectangle(
     context.rotate(rectangle.rotation);
     context.translate(-cx, -cy);
   }
-  context.strokeStyle = rectangle.strokeColor;
+  // Use adaptive color if element has default stroke color
+  context.strokeStyle = (rectangle.strokeColor === STROKE_COLOR && adaptiveStrokeColor) ? adaptiveStrokeColor : rectangle.strokeColor;
   context.lineWidth = rectangle.strokeWidth;
   context.lineCap = "round";
   context.lineJoin = "round";
-  
+
   context.beginPath();
   if (typeof context.roundRect === "function") {
     context.roundRect(rectangle.x, rectangle.y, rectangle.width, rectangle.height, rectangle.radius);
@@ -344,12 +455,12 @@ export function drawRoundedRectangle(
     context.quadraticCurveTo(x, y, x + r, y);
     context.closePath();
   }
-  
+
   if (rectangle.fillColor && rectangle.fillColor !== "transparent" && rectangle.fillColor !== "none") {
     context.fillStyle = rectangle.fillColor;
     context.fill();
   }
-  
+
   context.stroke();
   context.restore();
 }

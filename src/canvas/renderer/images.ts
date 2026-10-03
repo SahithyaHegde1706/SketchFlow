@@ -39,31 +39,36 @@ export function getOrLoadImage(src: string, onLoaded: () => void): HTMLImageElem
   img.onload = () => {
     loadingSet.delete(src);
     if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+      console.warn("[SketchFlow] Loaded image has no usable dimensions:", src.startsWith("data:") ? `${src.slice(0, 48)}…` : src);
       resolveLoadWaiters(src, null);
       return;
     }
-    // Cache before redrawing so the redraw uses this image instead of starting another load.
     imageCache[src] = img;
     resolveLoadWaiters(src, img);
     onLoaded();
   };
   img.onerror = () => {
-    // Silent fail for now; the element just won't render
     loadingSet.delete(src);
+    const failedSource = src.startsWith("data:") ? `${src.slice(0, 48)}…` : src;
+    console.warn("[SketchFlow] Unable to load image:", failedSource);
     resolveLoadWaiters(src, null);
   };
   
   try {
     img.src = src;
-  } catch {
+  } catch (error) {
     loadingSet.delete(src);
+    console.warn("[SketchFlow] Unable to start image load:", error);
     resolveLoadWaiters(src, null);
   }
 
   return null;
 }
 
-/** Resolve when the image is cached or unavailable, sharing any in-flight load. */
+/**
+ * Resolves when an image is available in the cache, or with null if it fails.
+ * Shares an existing in-flight load and starts one only when necessary.
+ */
 export function waitForImage(src: string): Promise<HTMLImageElement | null> {
   const cachedImage = imageCache[src];
   if (cachedImage?.complete && cachedImage.naturalWidth > 0) {
@@ -77,6 +82,8 @@ export function waitForImage(src: string): Promise<HTMLImageElement | null> {
       loadWaiters.set(src, waiters);
     }
     waiters.add(resolve);
+
+    // This either joins the existing load or starts the same load used by the renderer.
     getOrLoadImage(src, () => {});
   });
 }
