@@ -13,6 +13,7 @@ import type {
 import { distanceBetweenPoints, distanceToSegment, rotatePoint } from "../geometry/geometry";
 import { getSelectionBounds } from "./selection";
 import { getElementCenter } from "@/editor/rotation";
+import { getTextBounds } from "@/canvas/renderer/text";
 
 export const ERASER_TOLERANCE = 8;
 
@@ -31,13 +32,17 @@ export function findSelectionAtPoint(
 
     let isHit = false;
     if (useBounds) {
-      const bounds = getSelectionBounds(context, record);
-      const hitPadding = 4;
-      isHit =
-        point.x >= bounds.left - hitPadding &&
-        point.x <= bounds.right + hitPadding &&
-        point.y >= bounds.top - hitPadding &&
-        point.y <= bounds.bottom + hitPadding;
+      if (record.kind === "element" && record.value.type === "text") {
+        isHit = isPointOnElement(context, point, record.value);
+      } else {
+        const bounds = getSelectionBounds(context, record);
+        const hitPadding = 4;
+        isHit =
+          point.x >= bounds.left - hitPadding &&
+          point.x <= bounds.right + hitPadding &&
+          point.y >= bounds.top - hitPadding &&
+          point.y <= bounds.bottom + hitPadding;
+      }
     } else {
       isHit = Boolean(
         record.kind === "stroke"
@@ -195,15 +200,14 @@ export function isPointInTextBounds(
   point: Point,
   text: TextElement,
 ) {
-  context.font = `${text.fontSize}px Arial, sans-serif`;
-  const width = context.measureText(text.text).width;
-  const padding = ERASER_TOLERANCE;
+  const bounds = getTextBounds(context, text);
+  const padding = Math.max(ERASER_TOLERANCE, text.fontSize * 0.2);
 
   return (
-    point.x >= text.x - padding &&
-    point.x <= text.x + width + padding &&
-    point.y >= text.y - text.fontSize - padding &&
-    point.y <= text.y + padding
+    point.x >= bounds.left - padding &&
+    point.x <= bounds.right + padding &&
+    point.y >= bounds.top - padding &&
+    point.y <= bounds.bottom + padding
   );
 }
 

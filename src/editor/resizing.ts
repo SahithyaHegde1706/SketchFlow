@@ -1,6 +1,60 @@
 import type { Bounds, FreehandStroke, ResizeHandle, Selection, WhiteboardElement } from "@/types/canvas";
-import { getBounds, getStrokeBounds } from "@/canvas/geometry/geometry";
-import { getSelectionBounds } from "@/canvas/interaction/selection";
+import { getBounds, getStrokeBounds, rotatePoint } from "@/canvas/geometry/geometry";
+import { getElementCenter } from "@/editor/rotation";
+import { getTextBounds } from "@/canvas/renderer/text";
+
+function getResizeBounds(element: WhiteboardElement, context?: CanvasRenderingContext2D): Bounds {
+  if (element.type === "text" && context) return getTextBounds(context, element);
+  if (element.type === "arrow") {
+    const angle = Math.atan2(element.endY - element.startY, element.endX - element.startX);
+    const length = 12;
+    const wing = Math.PI / 7;
+    return getBounds([
+      { x: element.startX, y: element.startY },
+      { x: element.endX, y: element.endY },
+      { x: element.endX - length * Math.cos(angle - wing), y: element.endY - length * Math.sin(angle - wing) },
+      { x: element.endX - length * Math.cos(angle + wing), y: element.endY - length * Math.sin(angle + wing) },
+    ]);
+  }
+  if (element.type === "line") {
+    return getBounds([
+      { x: element.startX, y: element.startY },
+      { x: element.endX, y: element.endY },
+    ]);
+  }
+  if (element.type !== "text") {
+    return { left: element.x, top: element.y, right: element.x + element.width, bottom: element.y + element.height };
+  }
+  return { left: element.x, top: element.y - element.fontSize, right: element.x + 20, bottom: element.y };
+}
+
+function preserveOppositeRotatedAnchor(
+  target: WhiteboardElement,
+  original: WhiteboardElement,
+  handle: ResizeHandle,
+  context?: CanvasRenderingContext2D,
+) {
+  if (!original.rotation) return;
+  const before = getResizeBounds(original, context);
+  const after = getResizeBounds(target, context);
+  const anchorFor = (bounds: Bounds) => ({
+    x: handle.includes("left") ? bounds.right : bounds.left,
+    y: handle.includes("top") ? bounds.bottom : bounds.top,
+  });
+  const beforeAnchor = rotatePoint(anchorFor(before), getElementCenter(original), original.rotation);
+  const afterAnchor = rotatePoint(anchorFor(after), getElementCenter(target), target.rotation ?? 0);
+  const dx = beforeAnchor.x - afterAnchor.x;
+  const dy = beforeAnchor.y - afterAnchor.y;
+  if (target.type === "line" || target.type === "arrow") {
+    target.startX += dx;
+    target.startY += dy;
+    target.endX += dx;
+    target.endY += dy;
+  } else {
+    target.x += dx;
+    target.y += dy;
+  }
+}
 
 export function resizeSelection(
   selection: Selection,
@@ -50,6 +104,12 @@ export function resizeSelection(
 
   if (selection.kind !== "element" || Array.isArray(original)) {
     return;
+  }
+
+  if (original.rotation) {
+    const localDelta = rotatePoint({ x: deltaX, y: deltaY }, { x: 0, y: 0 }, -original.rotation);
+    deltaX = localDelta.x;
+    deltaY = localDelta.y;
   }
 
   if (selection.value.type === "image" && original.type === "image") {
@@ -109,15 +169,7 @@ export function resizeSelection(
       selection.value.radius = Math.min(original.radius, Math.min(selection.value.width, selection.value.height) / 2);
     }
   } else if ((selection.value.type === "arrow" || selection.value.type === "line") && (original.type === "arrow" || original.type === "line")) {
-    let origBounds: Bounds;
-    if (context) {
-      origBounds = getSelectionBounds(context, { kind: "element", value: original });
-    } else {
-      origBounds = getBounds([
-        { x: original.startX, y: original.startY },
-        { x: original.endX, y: original.endY },
-      ]);
-    }
+    const origBounds = getResizeBounds(original, context);
 
     let nLeft = origBounds.left;
     let nTop = origBounds.top;
@@ -149,17 +201,7 @@ export function resizeSelection(
     selection.value.endX = nLeft + (original.endX - origBounds.left) * scaleX;
     selection.value.endY = nTop + (original.endY - origBounds.top) * scaleY;
   } else if (selection.value.type === "text" && original.type === "text") {
-    let origBounds: Bounds;
-    if (context) {
-      origBounds = getSelectionBounds(context, { kind: "element", value: original });
-    } else {
-      origBounds = {
-        left: original.x,
-        top: original.y - original.fontSize,
-        right: original.x + 20,
-        bottom: original.y,
-      };
-    }
+    const origBounds = getResizeBounds(original, context);
 
     let nLeft = origBounds.left;
     let nTop = origBounds.top;
@@ -193,5 +235,9 @@ export function resizeSelection(
     } else {
       selection.value.y = origBounds.top + newFontSize;
     }
+  }
+
+  if (original.rotation) {
+    preserveOppositeRotatedAnchor(selection.value, original, handle, context);
   }
 }

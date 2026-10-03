@@ -33,14 +33,22 @@ export function rotateElement(
   const dy = newCenter.y - origCenter.y;
 
   if ((target.type === "arrow" || target.type === "line") && (original.type === "arrow" || original.type === "line")) {
-    // Arrow and line endpoints need to orbit the main orbitCenter!
-    const newStart = rotatePoint({ x: original.startX, y: original.startY }, orbitCenter, deltaAngle);
-    const newEnd = rotatePoint({ x: original.endX, y: original.endY }, orbitCenter, deltaAngle);
+    // Store the final endpoints directly so renderers do not apply this rotation again.
+    const originalCenter = getElementCenter(original);
+    const priorRotation = original.rotation ?? 0;
+    const visibleStart = priorRotation
+      ? rotatePoint({ x: original.startX, y: original.startY }, originalCenter, priorRotation)
+      : { x: original.startX, y: original.startY };
+    const visibleEnd = priorRotation
+      ? rotatePoint({ x: original.endX, y: original.endY }, originalCenter, priorRotation)
+      : { x: original.endX, y: original.endY };
+    const newStart = rotatePoint(visibleStart, orbitCenter, deltaAngle);
+    const newEnd = rotatePoint(visibleEnd, orbitCenter, deltaAngle);
     target.startX = newStart.x;
     target.startY = newStart.y;
     target.endX = newEnd.x;
     target.endY = newEnd.y;
-    target.rotation = (original.rotation || 0) + deltaAngle;
+    target.rotation = 0;
   } else if (target.type !== "arrow" && target.type !== "line" && original.type !== "arrow" && original.type !== "line") {
     target.x = original.x + dx;
     target.y = original.y + dy;

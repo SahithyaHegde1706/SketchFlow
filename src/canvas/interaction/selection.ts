@@ -4,9 +4,8 @@ import { getElementCenter } from "@/editor/rotation";
 import { getTextBounds } from "../renderer/text";
 import { isItemLocked, isAnySelectionLocked } from "@/editor/locking";
 
-function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
+function getUnrotatedElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
   let unrotatedBounds: Bounds;
-  
   switch (element.type) {
     case "rectangle":
     case "roundedRectangle":
@@ -49,19 +48,84 @@ function getElementBounds(context: CanvasRenderingContext2D, element: Whiteboard
     }
   }
 
-  if (element.rotation) {
-    const center = getElementCenter(element);
-    const corners = [
-      { x: unrotatedBounds.left, y: unrotatedBounds.top },
-      { x: unrotatedBounds.right, y: unrotatedBounds.top },
-      { x: unrotatedBounds.right, y: unrotatedBounds.bottom },
-      { x: unrotatedBounds.left, y: unrotatedBounds.bottom },
-    ];
-    const rotatedCorners = corners.map(corner => rotatePoint(corner, center, element.rotation!));
-    return getBounds(rotatedCorners);
-  }
-
   return unrotatedBounds;
+}
+
+function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
+  const bounds = getUnrotatedElementBounds(context, element);
+  if (!element.rotation) return bounds;
+  const center = getElementCenter(element);
+  return getBounds([
+    { x: bounds.left, y: bounds.top },
+    { x: bounds.right, y: bounds.top },
+    { x: bounds.right, y: bounds.bottom },
+    { x: bounds.left, y: bounds.bottom },
+  ].map(corner => rotatePoint(corner, center, element.rotation!)));
+}
+
+export function getRotatedSelectionFrame(context: CanvasRenderingContext2D, element: WhiteboardElement, padding = 6) {
+  const bounds = getUnrotatedElementBounds(context, element);
+  const padded = {
+    left: bounds.left - padding,
+    top: bounds.top - padding,
+    right: bounds.right + padding,
+    bottom: bounds.bottom + padding,
+  };
+  const center = getElementCenter(element);
+  const rotate = (point: Point) => rotatePoint(point, center, element.rotation ?? 0);
+  const corners = [
+    rotate({ x: padded.left, y: padded.top }),
+    rotate({ x: padded.right, y: padded.top }),
+    rotate({ x: padded.right, y: padded.bottom }),
+    rotate({ x: padded.left, y: padded.bottom }),
+  ] as const;
+  const topMidpoint = rotate({ x: (padded.left + padded.right) / 2, y: padded.top });
+  const outward = { x: topMidpoint.x - center.x, y: topMidpoint.y - center.y };
+  const length = Math.hypot(outward.x, outward.y) || 1;
+  const rotationHandle = {
+    x: topMidpoint.x + (outward.x / length) * 24,
+    y: topMidpoint.y + (outward.y / length) * 24,
+  };
+  return { corners, rotationHandle };
+}
+
+function drawRotatedSelectionBounds(context: CanvasRenderingContext2D, element: WhiteboardElement, isLocked: boolean) {
+  const frame = getRotatedSelectionFrame(context, element);
+  context.save();
+  context.strokeStyle = isLocked ? "#ef4444" : "#0d9488";
+  context.lineWidth = 2;
+  context.setLineDash([5, 4]);
+  context.beginPath();
+  context.moveTo(frame.corners[0].x, frame.corners[0].y);
+  for (let index = 1; index < frame.corners.length; index += 1) {
+    context.lineTo(frame.corners[index].x, frame.corners[index].y);
+  }
+  context.closePath();
+  context.stroke();
+  context.setLineDash([]);
+
+  if (!isLocked) {
+    const topMidpoint = {
+      x: (frame.corners[0].x + frame.corners[1].x) / 2,
+      y: (frame.corners[0].y + frame.corners[1].y) / 2,
+    };
+    context.beginPath();
+    context.moveTo(topMidpoint.x, topMidpoint.y);
+    context.lineTo(frame.rotationHandle.x, frame.rotationHandle.y);
+    context.stroke();
+    context.beginPath();
+    context.arc(frame.rotationHandle.x, frame.rotationHandle.y, 10 / 1.5, 0, Math.PI * 2);
+    context.fillStyle = "#e5e7eb";
+    context.fill();
+    context.stroke();
+    for (const corner of frame.corners) {
+      context.beginPath();
+      context.rect(corner.x - 5, corner.y - 5, 10, 10);
+      context.fill();
+      context.stroke();
+    }
+  }
+  context.restore();
 }
 
 export function getSelectionBounds(
@@ -203,6 +267,10 @@ export function drawSelection(
 
   if (selections.length === 1) {
     const locked = isItemLocked(selections[0]!, elements);
+    if (selections[0]!.kind === "element" && selections[0]!.value.rotation) {
+      drawRotatedSelectionBounds(context, selections[0]!.value, locked);
+      return;
+    }
     drawSelectionBounds(
       context,
       getSelectionBounds(context, selections[0]!, elements),
@@ -236,6 +304,22 @@ export function findResizeHandleAtPoint(
 ): ResizeHandle | null {
   const padding = 6;
   const handleHitSize = 16;
+
+  if (selection.length === 1 && selection[0]!.kind === "element" && selection[0]!.value.rotation) {
+    const element = selection[0]!.value;
+    const frame = getRotatedSelectionFrame(context, element, padding);
+    if (Math.hypot(point.x - frame.rotationHandle.x, point.y - frame.rotationHandle.y) <= handleHitSize) {
+      return "rotate";
+    }
+    const handleTypes: ResizeHandle[] = ["top-left", "top-right", "bottom-right", "bottom-left"];
+    for (let index = 0; index < frame.corners.length; index += 1) {
+      const corner = frame.corners[index]!;
+      if (Math.abs(point.x - corner.x) <= handleHitSize / 2 && Math.abs(point.y - corner.y) <= handleHitSize / 2) {
+        return handleTypes[index]!;
+      }
+    }
+    return null;
+  }
   
   const combinedBounds = getCombinedSelectionBounds(context, selection, elements);
   const top = combinedBounds.top - padding;
