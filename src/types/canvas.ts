@@ -226,6 +226,7 @@ export type AlignmentGuide =
 
 export type CanvasSettings = {
   backgroundColor: string;
+  backgroundMode?: "theme-default" | "custom";
   showGrid: boolean;
   gridSize: number;
   snapSettings: SnapSettings;
