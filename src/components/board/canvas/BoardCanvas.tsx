@@ -166,6 +166,9 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const [isCropping, setIsCropping] = useState(false);
   activeToolRef.current = activeTool;
 
+  const drawCanvasRef = useRef<(() => void) | null>(null);
+  const handleImageLoaded = () => drawCanvasRef.current?.();
+
   const drawCanvas = () => {
     renderCanvas(
       canvasRef.current,
@@ -175,6 +178,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
+      handleImageLoaded,
       alignmentGuidesRef.current,
     );
     if (marqueeRef.current && canvasRef.current) {
@@ -185,6 +189,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       if (ctx) renderCropOverlay(ctx, cropRef.current, viewportRef.current);
     }
   };
+
+  useEffect(() => {
+    drawCanvasRef.current = drawCanvas;
+  });
 
   const addHistory = () => {
     if (!historyRef.current) return;
@@ -272,6 +280,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
+      handleImageLoaded,
     );
     notifyLayerChange();
   };
@@ -813,7 +822,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         elementsRef.current,
         [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current,
-        viewportRef.current, canvasSettings);
+        viewportRef.current, canvasSettings, handleImageLoaded);
     };
 
     const resizeObserver = new ResizeObserver(resizeCanvas);
@@ -860,6 +869,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
+      handleImageLoaded,
     );
   };
 
@@ -1081,6 +1091,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
+      handleImageLoaded,
     );
   };
 
@@ -1144,7 +1155,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       strokesRef.current,
       elementsRef.current,
       null, selectionRef.current,
-      viewportRef.current, canvasSettings);
+      viewportRef.current, canvasSettings, handleImageLoaded);
     resetDuplicateState(duplicateStateRef.current);
     addHistory();
   };
@@ -1263,7 +1274,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       strokesRef.current,
       elementsRef.current,
       null, selectionRef.current,
-      viewportRef.current, canvasSettings);
+      viewportRef.current, canvasSettings, handleImageLoaded);
     return true;
   };
 
@@ -1339,7 +1350,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
             strokesRef.current,
             elementsRef.current,
             null, selectionRef.current,
-            viewportRef.current, canvasSettings);
+            viewportRef.current, canvasSettings, handleImageLoaded);
           actions.notifyClipboardChange();
           actions.notifyLayerChange();
         }
@@ -1502,7 +1513,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         elementsRef.current,
         [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
         selectionRef.current,
-        viewportRef.current, canvasSettings);
+        viewportRef.current, canvasSettings, handleImageLoaded);
       return;
     }
 
@@ -1721,6 +1732,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current,
       viewportRef.current,
       canvasSettings,
+      handleImageLoaded,
     );
   };
 
@@ -1864,7 +1876,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           strokesRef.current,
           elementsRef.current,
           null, selectionRef.current,
-          viewportRef.current, canvasSettings);
+          viewportRef.current, canvasSettings, handleImageLoaded);
         if (rotation.moved) {
           resetDuplicateState(duplicateStateRef.current);
           addHistory();
@@ -1917,7 +1929,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       strokesRef.current,
       elementsRef.current,
       null, selectionRef.current,
-      viewportRef.current, canvasSettings);
+      viewportRef.current, canvasSettings, handleImageLoaded);
     addHistory();
   };
 
@@ -1975,7 +1987,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         strokesRef.current,
         elementsRef.current,
         null, selectionRef.current,
-        viewportRef.current, canvasSettings);
+        viewportRef.current, canvasSettings, handleImageLoaded);
       resetDuplicateState(duplicateStateRef.current);
       addHistory();
       return;

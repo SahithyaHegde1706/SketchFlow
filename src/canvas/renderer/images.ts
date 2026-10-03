@@ -10,12 +10,13 @@ const loadingSet: Set<string> = new Set();
  * @returns The HTMLImageElement if fully loaded, otherwise null.
  */
 export function getOrLoadImage(src: string, onLoaded: () => void): HTMLImageElement | null {
-  if (imageCache[src]) {
+  const cachedImage = imageCache[src];
+  if (cachedImage) {
     // If it's already completely loaded and usable
-    if (imageCache[src].complete && imageCache[src].naturalWidth > 0) {
-      return imageCache[src];
+    if (cachedImage.complete && cachedImage.naturalWidth > 0) {
+      return cachedImage;
     }
-    return null;
+    delete imageCache[src];
   }
 
   // Prevent duplicate load triggers for the same src
@@ -27,8 +28,12 @@ export function getOrLoadImage(src: string, onLoaded: () => void): HTMLImageElem
 
   const img = new Image();
   img.onload = () => {
-    imageCache[src] = img;
     loadingSet.delete(src);
+    if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+      return;
+    }
+    // Cache before redrawing so the redraw uses this image instead of starting another load.
+    imageCache[src] = img;
     onLoaded();
   };
   img.onerror = () => {
@@ -36,7 +41,11 @@ export function getOrLoadImage(src: string, onLoaded: () => void): HTMLImageElem
     loadingSet.delete(src);
   };
   
-  img.src = src;
+  try {
+    img.src = src;
+  } catch {
+    loadingSet.delete(src);
+  }
 
   return null;
 }

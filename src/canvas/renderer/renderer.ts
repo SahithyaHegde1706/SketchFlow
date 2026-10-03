@@ -58,6 +58,7 @@ export function renderCanvas(
   selection: SelectionSet | null,
   viewport: Viewport,
   settings: CanvasSettings,
+  onImageLoaded?: () => void,
   guides: AlignmentGuide[] = [],
 ) {
   if (!canvas) {
@@ -124,10 +125,7 @@ export function renderCanvas(
     } else if (element.type === "line") {
       drawLine(context, element);
     } else if (element.type === "image") {
-      drawImageElement(context, element, () => {
-        // We need a way to trigger redraw, but we don't have it easily here without a callback.
-        // In a real implementation we'd trigger a re-render from the store when the image loads.
-      });
+      drawImageElement(context, element, onImageLoaded ?? (() => {}));
     } else {
       drawTextElement(context, element);
     }
