@@ -12,6 +12,7 @@ export type SerializedCreationRecord =
 export type SketchFlowDocumentV1 = {
   version: 1;
   type: "sketchflow-document";
+  name?: string;
   canvasSettings: CanvasSettings;
   strokes: FreehandStroke[];
   elements: WhiteboardElement[];
