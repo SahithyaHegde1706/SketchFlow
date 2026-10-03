@@ -52,7 +52,34 @@ export function resizeSelection(
     return;
   }
 
-  if (
+  if (selection.value.type === "image" && original.type === "image") {
+    const resizeLeft = handle.includes("left");
+    const resizeTop = handle.includes("top");
+    const anchorX = resizeLeft ? original.x + original.width : original.x;
+    const anchorY = resizeTop ? original.y + original.height : original.y;
+    const horizontalDirection = resizeLeft ? -1 : 1;
+    const verticalDirection = resizeTop ? -1 : 1;
+
+    let width = Math.max(1, original.width + horizontalDirection * deltaX);
+    let height = Math.max(1, original.height + verticalDirection * deltaY);
+
+    if (original.maintainAspectRatio !== false) {
+      const aspectRatio = original.width / original.height;
+      const widthChange = Math.abs(width - original.width) / original.width;
+      const heightChange = Math.abs(height - original.height) / original.height;
+
+      if (widthChange >= heightChange) {
+        height = Math.max(1, width / aspectRatio);
+      } else {
+        width = Math.max(1, height * aspectRatio);
+      }
+    }
+
+    selection.value.width = width;
+    selection.value.height = height;
+    selection.value.x = resizeLeft ? anchorX - width : anchorX;
+    selection.value.y = resizeTop ? anchorY - height : anchorY;
+  } else if (
     (selection.value.type === "rectangle" && original.type === "rectangle") ||
     (selection.value.type === "roundedRectangle" && original.type === "roundedRectangle") ||
     (selection.value.type === "circle" && original.type === "circle")
