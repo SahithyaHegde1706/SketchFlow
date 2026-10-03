@@ -1,7 +1,7 @@
 "use client";
 
 import { createLine, createRoundedRectangle } from "@/editor/tools";
-import type { ChangeEvent, KeyboardEvent, MouseEvent, PointerEvent } from "react";
+import type { ChangeEvent, MouseEvent, PointerEvent } from "react";
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import type {
   AlignmentGuide,
@@ -14,7 +14,6 @@ import type {
   DragState,
   FreehandStroke,
   MultiDragState,
-  PanState,
   Point,
   RectangleElement,
   RotationState,
@@ -28,39 +27,36 @@ import type {
   Tool,
   Viewport,
   WhiteboardElement,
-  AlignOperation,
 } from "@/types/canvas";
 import { calculateSnap } from "@/editor/snapping";
 import { exportToPng } from "@/export/png";
 import { exportToSvg } from "@/export/svg";
-import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer";
-import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/hit-testing";
-import { findResizeHandleAtPoint, getCombinedSelectionBounds, getSelectionBounds } from "@/canvas/selection";
-import { screenToLogical, zoomViewport } from "@/canvas/geometry";
-import { shouldSamplePoint } from "@/canvas/freehand";
+import { STROKE_COLOR, TEXT_FONT_SIZE, renderCanvas } from "@/canvas/renderer/renderer";
+import { findSelectionAtPoint, isPointOnElement, isPointOnStroke } from "@/canvas/interaction/hit-testing";
+import { findResizeHandleAtPoint, getCombinedSelectionBounds, getSelectionBounds } from "@/canvas/interaction/selection";
+import { useCanvasViewport } from "@/hooks/useCanvasViewport";
+import { shouldSamplePoint } from "@/canvas/renderer/freehand";
 import { normalizeMarqueeBounds, getMarqueeSelections, MIN_MARQUEE_DISTANCE, unionSelections } from "@/editor/marquee";
-import { renderMarquee } from "@/canvas/renderer";
+import { renderMarquee } from "@/canvas/renderer/renderer";
 import { removeByReference } from "@/editor/deletion";
 import { cloneSelectionValue, createArrow, createCircle, createRectangle } from "@/editor/tools";
-import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
 import { moveSelection } from "@/editor/movement";
 import { resizeSelection } from "@/editor/resizing";
 import { applyRotation } from "@/editor/rotation";
-import { applyLayerOperation, getLayerAvailability } from "@/editor/layering";
-import type { LayerAvailability, LayerOperation } from "@/editor/layering";
-import { ZoomControls } from "@/components/ZoomControls";
+import { applyLayerOperation } from "@/editor/layering";
+import type { LayerOperation } from "@/editor/layering";
+import { ZoomControls } from "@/components/board/canvas/ZoomControls";
 import {
   canRedo,
   canUndo,
   createHistory,
-  createSelectionSnapshot,
   createSnapshot,
   record,
   redo,
   undo,
 } from "@/history/history";
 import type { HistoryState, CanvasSnapshot } from "@/history/types";
-import { groupSelection, ungroupSelection, getSelectedGroups, removeElementFromGroups } from "@/editor/grouping";
+import { groupSelection, ungroupSelection, removeElementFromGroups } from "@/editor/grouping";
 import {
   copyToClipboard,
   offsetClipboard,
@@ -72,14 +68,14 @@ import type { ClipboardState, DuplicateState } from "@/clipboard/types";
 import {
   isItemLocked,
   isAnySelectionLocked,
-  getLockAvailability,
   setSelectionLock,
 } from "@/editor/locking";
 import type { SketchFlowDocumentV1 } from "@/document/types";
 import { exportToSketchFlowDocument } from "@/document/serialization";
 import type { CropState } from "@/types/canvas";
 import { getCropLocalCoordinates, applyCrop } from "@/editor/cropping";
-import { renderCropOverlay } from "@/canvas/renderer";
+import { renderCropOverlay } from "@/canvas/renderer/renderer";
+import { useCanvasKeyboard } from "@/hooks/useCanvasKeyboard";
 
 type BoardCanvasProps = {
   activeTool: Tool;
@@ -87,12 +83,9 @@ type BoardCanvasProps = {
   onToolSelect: (tool: Tool) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
-  onLayerChange?: (availability: LayerAvailability) => void;
-  onGroupAvailabilityChange?: (canGroup: boolean, canUngroup: boolean) => void;
-  onAlignAvailabilityChange?: (canAlign: boolean, canDistribute: boolean) => void;
-  onLockAvailabilityChange?: (canLock: boolean, canUnlock: boolean) => void;
   onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
   onAutosave?: () => void;
+  onViewportChange?: (viewport: Viewport) => void;
 };
 
 export type BoardCanvasHandle = {
@@ -103,26 +96,26 @@ export type BoardCanvasHandle = {
   duplicate: () => void;
   deleteSelection: () => void;
   setSelection: (selections: SelectionSet) => void;
-  updateProperties: (updates: Partial<WhiteboardElement>) => void;
+  updateProperties: (updates: Partial<WhiteboardElement>, commitHistory?: boolean) => void;
   applyLayerOperation: (operation: LayerOperation) => void;
   group: () => void;
   ungroup: () => void;
-  align: (operation: AlignOperation) => void;
   lock: () => void;
   unlock: () => void;
   toggleLock: (target?: Selection) => void;
   /** Export the full document as PNG or SVG and trigger a browser download. */
-  exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string) => void;
-  importDocument: (doc: SketchFlowDocumentV1) => void;
+  exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string, boardName?: string) => void;
   restoreDocument: (doc: SketchFlowDocumentV1) => void;
-  getDocumentState: () => { strokes: FreehandStroke[]; elements: WhiteboardElement[]; groups: Group[]; creationOrder: CreationRecord[] };
-  clearDocument: () => void;
   addImage?: (file: File) => void;
   startCrop: () => void;
+  /** Get the current document state for autosave */
+  getDocumentState: () => { strokes: FreehandStroke[]; elements: WhiteboardElement[]; groups: Group[]; creationOrder: CreationRecord[] };
+  /** Clear the document to start fresh */
+  clearDocument: () => void;
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onLayerChange, onGroupAvailabilityChange, onAlignAvailabilityChange, onLockAvailabilityChange, onDocumentChange, onAutosave }, ref) => {
+  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onDocumentChange, onAutosave, onViewportChange }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<FreehandStroke[]>([]);
   const elementsRef = useRef<WhiteboardElement[]>([]);
@@ -132,8 +125,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const dragRef = useRef<DragState | null>(null);
   const multiDragRef = useRef<MultiDragState | null>(null);
   const rotationRef = useRef<RotationState | null>(null);
-  const viewportRef = useRef<Viewport>({ offsetX: 0, offsetY: 0, scale: 1 });
-  const panRef = useRef<PanState | null>(null);
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const clipboardRef = useRef<ClipboardState>({ item: null });
   const duplicateStateRef = useRef<DuplicateState>(createDuplicateState());
@@ -150,7 +141,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const textInputRef = useRef<HTMLInputElement>(null);
   const textEditorRef = useRef<TextEditorState | null>(null);
   const [textEditor, setTextEditor] = useState<TextEditorState | null>(null);
-  const [zoom, setZoom] = useState(1);
   const activePointerIdRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryState | null>(null);
   const activeToolRef = useRef(activeTool);
@@ -165,7 +155,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const cropRef = useRef<CropState | null>(null);
   const [isCropping, setIsCropping] = useState(false);
   activeToolRef.current = activeTool;
-
   const drawCanvasRef = useRef<(() => void) | null>(null);
   const handleImageLoaded = () => drawCanvasRef.current?.();
 
@@ -192,6 +181,34 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
   useEffect(() => {
     drawCanvasRef.current = drawCanvas;
+  });
+
+  const {
+    viewportRef,
+    zoom,
+    toLogicalPoint,
+    beginPan,
+    updatePan,
+    hasPan,
+    finishPan,
+    restorePan,
+    zoomFromCenter,
+    resetViewport,
+    fitContentToScreen,
+  } = useCanvasViewport({
+    canvasRef,
+    onViewportChange,
+    drawCanvas,
+    renderZoomedViewport: (viewport) => renderCanvas(
+      canvasRef.current,
+      strokesRef.current,
+      elementsRef.current,
+      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
+      selectionRef.current,
+      viewport,
+      canvasSettings,
+      handleImageLoaded,
+    ),
   });
 
   const addHistory = () => {
@@ -233,6 +250,22 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, [], groupsRef.current)
     );
   }, []);
+
+  // Redraw canvas when canvasSettings changes (e.g., background color from theme)
+  useEffect(() => {
+    if (canvasRef.current) {
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
+        selectionRef.current,
+        viewportRef.current,
+        canvasSettings,
+        handleImageLoaded
+      );
+    }
+  }, [canvasSettings, viewportRef]);
 
   const applySnapshot = (snapshot: CanvasSnapshot) => {
     strokesRef.current = JSON.parse(JSON.stringify(snapshot.strokes));
@@ -282,7 +315,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       canvasSettings,
       handleImageLoaded,
     );
-    notifyLayerChange();
   };
 
   const handleUndo = () => {
@@ -293,7 +325,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       applySnapshot(snapshot);
       resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
-        onAutosave?.();
+      onAutosave?.();
     }
   };
 
@@ -305,7 +337,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       applySnapshot(snapshot);
       resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
-        onAutosave?.();
+      onAutosave?.();
     }
   };
 
@@ -317,46 +349,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     );
   };
 
-  const notifyLayerChange = () => {
-    if (historyRef.current) {
-      const lastSnapshot = historyRef.current.undoStack[historyRef.current.undoStack.length - 1];
-      if (lastSnapshot) {
-        historyRef.current = {
-          ...historyRef.current,
-          undoStack: [
-            ...historyRef.current.undoStack.slice(0, -1),
-            { ...lastSnapshot, selection: createSelectionSnapshot(strokesRef.current, selectionRef.current) },
-          ],
-        };
-      }
-      }
-      onLayerChange?.(getLayerAvailability(creationOrderRef.current, selectionRef.current));
-      notifyGroupAvailabilityChange();
-      onDocumentChange?.([...creationOrderRef.current], [...groupsRef.current], [...selectionRef.current]);
-    };
 
-  const notifyGroupAvailabilityChange = () => {
-    const elementIds = selectionRef.current
-      .filter((item): item is Extract<Selection, { kind: "element" }> => item.kind === "element")
-      .map(item => item.value.id)
-      .filter((id, index, ids) => ids.indexOf(id) === index);
-    
-    const canGroup = elementIds.length >= 2 && !elementIds.some(id => groupsRef.current.some(g => g.elementIds.includes(id)));
-    const canUngroup = getSelectedGroups(selectionRef.current).length > 0;
-    
-    onGroupAvailabilityChange?.(canGroup, canUngroup);
-    onAlignAvailabilityChange?.(selectionRef.current.length >= 2, selectionRef.current.length >= 3);
-
-    const { canLock, canUnlock } = getLockAvailability(selectionRef.current, elementsRef.current);
-    onLockAvailabilityChange?.(canLock, canUnlock);
-  };
 
   const handleLock = () => {
     if (setSelectionLock(selectionRef.current, elementsRef.current, true)) {
       drawCanvas();
       addHistory();
       resetDuplicateState(duplicateStateRef.current);
-      notifyLayerChange();
     }
   };
 
@@ -365,7 +364,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       drawCanvas();
       addHistory();
       resetDuplicateState(duplicateStateRef.current);
-      notifyLayerChange();
     }
   };
 
@@ -376,7 +374,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       drawCanvas();
       addHistory();
       resetDuplicateState(duplicateStateRef.current);
-      notifyLayerChange();
     }
   };
 
@@ -387,7 +384,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       drawCanvas();
       addHistory();
       resetDuplicateState(duplicateStateRef.current);
-      notifyLayerChange();
     }
   };
 
@@ -401,7 +397,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       drawCanvas();
       addHistory();
       resetDuplicateState(duplicateStateRef.current);
-      notifyLayerChange();
     }
   };
 
@@ -413,7 +408,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     drawCanvas();
     addHistory();
     resetDuplicateState(duplicateStateRef.current);
-    notifyLayerChange();
   };
 
   const handleCopy = () => {
@@ -453,7 +447,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     drawCanvas();
     addHistory();
     notifyClipboardChange();
-    notifyLayerChange();
   };
 
   const handleDuplicate = () => {
@@ -489,35 +482,12 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     drawCanvas();
     addHistory();
     notifyClipboardChange();
-    notifyLayerChange();
-  };
-
-  const handleAlign = async (operation: AlignOperation) => {
-    if (selectionRef.current.length < 2) return;
-    if (isAnySelectionLocked(selectionRef.current, elementsRef.current)) return;
-
-    const context = canvasRef.current?.getContext("2d");
-    if (!context) return;
-    
-    const { alignSelection } = await import("@/editor/alignment");
-    
-    // clone all currently selected objects as originals
-    const originals = selectionRef.current.map(selection => cloneSelectionValue(selection));
-    
-    const moved = alignSelection(context, selectionRef.current, originals, operation, elementsRef.current);
-    
-    if (moved) {
-      drawCanvas();
-      addHistory();
-      resetDuplicateState(duplicateStateRef.current);
-    }
   };
 
   const handleSetSelection = (selections: SelectionSet) => {
     selectionRef.current = [...selections];
     resetDuplicateState(duplicateStateRef.current);
     drawCanvas();
-    notifyLayerChange();
   };
 
   const handleDeleteSelection = () => {
@@ -543,11 +513,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       selectionRef.current = selectionRef.current.filter(sel => isItemLocked(sel, elementsRef.current));
       drawCanvas();
       addHistory();
-      notifyLayerChange();
-    }
+      }
   };
 
-  const handleUpdateProperties = (updates: Partial<WhiteboardElement>) => {
+  const handleUpdateProperties = (updates: Partial<WhiteboardElement>, commitHistory: boolean = true) => {
     if (selectionRef.current.length === 0) return;
     if (isAnySelectionLocked(selectionRef.current, elementsRef.current)) return;
     
@@ -591,13 +560,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     
     if (changed) {
       drawCanvas();
-      addHistory();
-      resetDuplicateState(duplicateStateRef.current);
-      notifyLayerChange();
+      if (commitHistory) {
+        addHistory();
+        resetDuplicateState(duplicateStateRef.current);
+      }
     }
   };
 
-  const handleExportCanvas = (format: "png" | "svg" | "sketchflow", backgroundColor: string) => {
+  const handleExportCanvas = (format: "png" | "svg" | "sketchflow", backgroundColor: string, boardName?: string) => {
     // Export is a read-only operation; it must NOT modify any editor state.
     const strokes       = strokesRef.current;
     const elements      = elementsRef.current;
@@ -611,11 +581,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     } else if (format === "png") {
       exportToPng(strokes, elements, backgroundColor, creationOrder);
     } else if (format === "sketchflow") {
-      exportToSketchFlowDocument(strokes, elements, groupsRef.current, creationOrder, canvasSettings);
+      exportToSketchFlowDocument(strokes, elements, groupsRef.current, creationOrder, canvasSettings, boardName);
     }
   };
 
-  const handleImportDocument = (doc: SketchFlowDocumentV1) => {
+  const handleRestoreDocument = (doc: SketchFlowDocumentV1) => {
     // 1. Reset transient states
     selectionRef.current = [];
     dragRef.current = null;
@@ -642,58 +612,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     // 4. Center viewport around content (if there is content)
     const context = canvasRef.current?.getContext("2d");
     if (context && (strokesRef.current.length > 0 || elementsRef.current.length > 0)) {
-      // Find bounding box
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      
-      const checkPoint = (p: Point) => {
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-      };
-
-      for (const stroke of strokesRef.current) stroke.forEach(checkPoint);
-      for (const el of elementsRef.current) {
-        const startX = "x" in el ? el.x : el.startX;
-        const startY = "y" in el ? el.y : el.startY;
-        checkPoint({ x: startX, y: startY });
-        if (el.type === "rectangle" || el.type === "roundedRectangle" || el.type === "circle") {
-          checkPoint({ x: el.x + el.width, y: el.y + el.height });
-        } else if (el.type === "line" || el.type === "arrow") {
-          checkPoint({ x: el.endX, y: el.endY });
-        }
-      }
-
-      if (minX !== Infinity && canvasRef.current) {
-        const boundsWidth = maxX - minX;
-        const boundsHeight = maxY - minY;
-        const canvasRect = canvasRef.current.getBoundingClientRect();
-        
-        // Fit within 80% of canvas
-        const scaleX = (canvasRect.width * 0.8) / Math.max(boundsWidth, 1);
-        const scaleY = (canvasRect.height * 0.8) / Math.max(boundsHeight, 1);
-        const newScale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.25), 2);
-        
-        const centerX = minX + boundsWidth / 2;
-        const centerY = minY + boundsHeight / 2;
-        
-        viewportRef.current = {
-          scale: newScale,
-          offsetX: canvasRect.width / 2 - centerX * newScale,
-          offsetY: canvasRect.height / 2 - centerY * newScale,
-        };
-        setZoom(newScale);
-      }
+      // Fit within 80% of canvas
+      fitContentToScreen(strokesRef.current, elementsRef.current, 0.8);
     } else {
       // Empty document, reset viewport
-      viewportRef.current = { scale: 1, offsetX: 0, offsetY: 0 };
-      setZoom(1);
+      resetViewport();
     }
 
     // 5. Update canvas and history
     drawCanvas();
     addHistory();
-    notifyLayerChange();
   };
 
   useImperativeHandle(ref, () => ({
@@ -708,13 +636,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     applyLayerOperation: handleLayerOperation,
     group: handleGroup,
     ungroup: handleUngroup,
-    align: handleAlign,
     lock: handleLock,
     unlock: handleUnlock,
     toggleLock: handleToggleLock,
     exportCanvas: handleExportCanvas,
-    importDocument: handleImportDocument,
-    restoreDocument: handleImportDocument,
+    restoreDocument: handleRestoreDocument,
     getDocumentState: () => ({
       strokes: strokesRef.current,
       elements: elementsRef.current,
@@ -727,8 +653,25 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       groupsRef.current = [];
       creationOrderRef.current = [];
       selectionRef.current = [];
-      historyRef.current = createHistory(createSnapshot([], [], [], [], []));
-      drawCanvas();
+      historyRef.current = createHistory(
+        createSnapshot(
+          strokesRef.current,
+          elementsRef.current,
+          creationOrderRef.current,
+          selectionRef.current,
+          groupsRef.current,
+        ),
+      );
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        null,
+        selectionRef.current,
+        viewportRef.current,
+        canvasSettings,
+        handleImageLoaded
+      );
       onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
       onHistoryChange?.(false, false);
       onClipboardChange?.(false, false, false);
@@ -787,10 +730,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           elementsRef.current.push(newImage);
           creationOrderRef.current.push({ kind: "element", value: newImage });
           selectionRef.current = [{ kind: "element", value: newImage }];
+          onToolSelect("select");
           
           drawCanvas();
           addHistory();
-          notifyLayerChange();
         };
         img.src = dataUrl;
       };
@@ -806,23 +749,18 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     const resizeCanvas = () => {
-      const bounds = canvas.getBoundingClientRect();
+      const bounds = canvas.parentElement?.getBoundingClientRect();
       const context = canvas.getContext("2d");
 
-      if (!context || bounds.width === 0 || bounds.height === 0) {
+      if (!context || !bounds || bounds.width === 0 || bounds.height === 0) {
         return;
       }
 
       const devicePixelRatio = window.devicePixelRatio || 1;
-      canvas.width = Math.round(bounds.width * devicePixelRatio);
-      canvas.height = Math.round(bounds.height * devicePixelRatio);
-      renderCanvas(
-        canvas,
-        strokesRef.current,
-        elementsRef.current,
-        [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-        selectionRef.current,
-        viewportRef.current, canvasSettings, handleImageLoaded);
+      canvas.width = bounds.width * devicePixelRatio;
+      canvas.height = bounds.height * devicePixelRatio;
+      context.scale(devicePixelRatio, devicePixelRatio);
+      drawCanvas();
     };
 
     const resizeObserver = new ResizeObserver(resizeCanvas);
@@ -854,52 +792,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   }, [textEditor]);
 
-  const applyZoom = (newScale: number, centerX: number, centerY: number) => {
-    newScale = Math.min(Math.max(newScale, 0.25), 4);
-    if (newScale === viewportRef.current.scale) return;
-
-    viewportRef.current = zoomViewport(viewportRef.current, newScale, centerX, centerY);
-    setZoom(newScale);
-
-    renderCanvas(
-      canvasRef.current,
-      strokesRef.current,
-      elementsRef.current,
-      [activeRectangleRef.current, activeCircleRef.current, activeArrowRef.current, activeLineRef.current, activeRoundedRectangleRef.current].find(Boolean) || null,
-      selectionRef.current,
-      viewportRef.current,
-      canvasSettings,
-      handleImageLoaded,
-    );
-  };
-
-  const zoomFromCenter = (newScale: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    applyZoom(newScale, rect.width / 2, rect.height / 2);
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const onNativeWheel = (event: WheelEvent) => {
-      if (event.ctrlKey || event.metaKey) {
-        event.preventDefault();
-        const delta = event.deltaY > 0 ? -0.1 : 0.1;
-        const rect = canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
-        applyZoom(viewportRef.current.scale + delta, x, y);
-      }
-    };
-
-    canvas.addEventListener("wheel", onNativeWheel, { passive: false });
-    return () => canvas.removeEventListener("wheel", onNativeWheel);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (!event.isPrimary || (event.pointerType === "mouse" && event.button !== 0)) {
       return;
@@ -909,7 +801,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       event.currentTarget.setPointerCapture(event.pointerId);
       activePointerIdRef.current = event.pointerId;
       const point = getPoint(event);
-      const logical = screenToLogical(point, viewportRef.current);
+      const logical = toLogicalPoint(point);
       const local = getCropLocalCoordinates(logical.x, logical.y, cropRef.current.element);
       
       const hs = 10 / viewportRef.current.scale;
@@ -933,19 +825,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     const screenPoint = getPoint(event);
 
     if (activeTool === "hand") {
-      panRef.current = {
-        pointerStartX: screenPoint.x,
-        pointerStartY: screenPoint.y,
-        originOffsetX: viewportRef.current.offsetX,
-        originOffsetY: viewportRef.current.offsetY,
-      };
+      beginPan(screenPoint);
       activePointerIdRef.current = event.pointerId;
       event.currentTarget.setPointerCapture(event.pointerId);
       event.currentTarget.style.cursor = "grabbing";
       return;
     }
 
-    const point = screenToLogical(screenPoint, viewportRef.current);
+    const point = toLogicalPoint(screenPoint);
 
     if (activeTool === "select") {
       const currentSelection = selectionRef.current;
@@ -997,7 +884,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
           ? currentSelection.filter(selection => !selectionIncludes([selection], clickedSelection))
           : [...currentSelection, clickedSelection];
         resetDuplicateState(duplicateStateRef.current);
-        notifyLayerChange();
         dragRef.current = null;
         multiDragRef.current = null;
       } else if (clickedSelection) {
@@ -1009,7 +895,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (!wasSelected) {
           selectionRef.current = [clickedSelection];
           resetDuplicateState(duplicateStateRef.current);
-          notifyLayerChange();
         }
 
         if (movableSelections.length > 0) {
@@ -1056,7 +941,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     selectionRef.current = [];
-    notifyLayerChange();
 
     activePointerIdRef.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -1137,7 +1021,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       return;
     }
 
-    const logicalPoint = screenToLogical({ x: editor.x, y: editor.y }, viewportRef.current);
+    const logicalPoint = toLogicalPoint({ x: editor.x, y: editor.y });
 
     const textElement: TextElement = {
       id: crypto.randomUUID(),
@@ -1150,24 +1034,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     };
     elementsRef.current.push(textElement);
     creationOrderRef.current.push({ kind: "element", value: textElement });
-    renderCanvas(
-      canvasRef.current,
-      strokesRef.current,
-      elementsRef.current,
-      null, selectionRef.current,
-      viewportRef.current, canvasSettings, handleImageLoaded);
+    selectionRef.current = [{ kind: "element", value: textElement }];
+    onToolSelect("select");
+    drawCanvas();
     resetDuplicateState(duplicateStateRef.current);
     addHistory();
-  };
-
-  const handleTextKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      commitText();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      cancelText();
-    }
   };
 
   const cancelInteraction = () => {
@@ -1225,17 +1096,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       // Cancel active marquee and restore the selection that existed before it started.
       marqueeRef.current = null;
       selectionRef.current = [...preMarqueeSelectionRef.current];
-      notifyLayerChange();
     }
 
-    if (panRef.current) {
-      viewportRef.current = {
-        ...viewportRef.current,
-        offsetX: panRef.current.originOffsetX,
-        offsetY: panRef.current.originOffsetY,
-      };
-      panRef.current = null;
-    }
+    restorePan();
+    finishPan();
 
     activeRectangleRef.current = null;
     activeRectangleStartRef.current = null;
@@ -1288,193 +1152,45 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     addHistory();
   };
 
-  const keyboardActionsRef = useRef({
-    addHistory,
-    cancelInteraction,
-    handleCopy,
-    handleDuplicate,
-    handlePaste,
-    handleRedo,
-    handleUndo,
-    finishKeyboardMovement,
-    moveSelectedByKeyboard,
-    handleLayerOperation,
-    notifyClipboardChange,
-    notifyLayerChange,
-    onToolSelect,
-    handleGroup,
-    handleUngroup,
-    deleteSelection: handleDeleteSelection,
-    handleLock,
-    handleUnlock,
+  const handleTextKeyDown = useCanvasKeyboard({
+    actions: {
+      cancelInteraction,
+      handleCopy,
+      handleDuplicate,
+      handlePaste,
+      handleRedo,
+      handleUndo,
+      finishKeyboardMovement,
+      moveSelectedByKeyboard,
+      handleLayerOperation,
+      notifyClipboardChange,
+      onToolSelect,
+      handleGroup,
+      handleUngroup,
+      deleteSelection: handleDeleteSelection,
+      handleLock,
+      handleUnlock,
+    },
+    isTextEditorActive: () => Boolean(textEditorRef.current),
+    cancelText,
+    commitText,
+    hasActiveInteraction: () => activePointerIdRef.current !== null || Boolean(dragRef.current) || Boolean(activeStrokeRef.current),
+    clearSelection: () => {
+      selectionRef.current = [];
+      renderCanvas(
+        canvasRef.current,
+        strokesRef.current,
+        elementsRef.current,
+        null, selectionRef.current,
+        viewportRef.current, canvasSettings, handleImageLoaded);
+    },
   });
-  keyboardActionsRef.current = {
-    addHistory,
-    cancelInteraction,
-    handleCopy,
-    handleDuplicate,
-    handlePaste,
-    handleRedo,
-    handleUndo,
-    finishKeyboardMovement,
-    moveSelectedByKeyboard,
-    handleLayerOperation,
-    notifyClipboardChange,
-    notifyLayerChange,
-    onToolSelect,
-    handleGroup,
-    handleUngroup,
-    deleteSelection: handleDeleteSelection,
-    handleLock,
-    handleUnlock,
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const actions = keyboardActionsRef.current;
-      if (isTextEditingTarget(event.target)) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        if (textEditorRef.current) {
-          cancelText();
-        } else if (activePointerIdRef.current !== null || dragRef.current || activeStrokeRef.current) {
-          actions.cancelInteraction();
-        } else {
-          selectionRef.current = [];
-          renderCanvas(
-            canvasRef.current,
-            strokesRef.current,
-            elementsRef.current,
-            null, selectionRef.current,
-            viewportRef.current, canvasSettings, handleImageLoaded);
-          actions.notifyClipboardChange();
-          actions.notifyLayerChange();
-        }
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        actions.finishKeyboardMovement();
-        actions.deleteSelection();
-        return;
-      }
-
-      const isMac = navigator.userAgent.toLowerCase().includes("mac");
-      const modifierKey = isMac ? event.metaKey : event.ctrlKey;
-      const layerModifierKey = event.ctrlKey || event.metaKey;
-      const layerShortcut = layerModifierKey && (
-        event.code === "BracketRight" || event.code === "BracketLeft"
-      );
-      if (layerShortcut) {
-        event.preventDefault();
-        actions.finishKeyboardMovement();
-        const operation: LayerOperation = event.code === "BracketRight"
-          ? event.shiftKey ? "bring-to-front" : "bring-forward"
-          : event.shiftKey ? "send-to-back" : "send-backward";
-        actions.handleLayerOperation(operation);
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "z") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        if (event.shiftKey) actions.handleRedo();
-        else actions.handleUndo();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "c") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        actions.handleCopy();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "v") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        actions.handlePaste();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "d") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        actions.handleDuplicate();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "g") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        if (event.shiftKey) actions.handleUngroup();
-        else actions.handleGroup();
-        return;
-      }
-      if (modifierKey && event.shiftKey && event.key.toLowerCase() === "l") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        actions.handleLock();
-        return;
-      }
-      if (modifierKey && event.shiftKey && event.key.toLowerCase() === "u") {
-        actions.finishKeyboardMovement();
-        event.preventDefault();
-        actions.handleUnlock();
-        return;
-      }
-      if (hasShortcutModifier(event)) {
-        return;
-      }
-
-      const movement = {
-        ArrowUp: { deltaX: 0, deltaY: event.shiftKey ? -10 : -1 },
-        ArrowDown: { deltaX: 0, deltaY: event.shiftKey ? 10 : 1 },
-        ArrowLeft: { deltaX: event.shiftKey ? -10 : -1, deltaY: 0 },
-        ArrowRight: { deltaX: event.shiftKey ? 10 : 1, deltaY: 0 },
-      }[event.key];
-      if (movement) {
-        if (actions.moveSelectedByKeyboard(movement.deltaX, movement.deltaY)) {
-          event.preventDefault();
-        }
-        return;
-      }
-
-      const tool = getToolForShortcut(event.key);
-      if (!tool) return;
-      event.preventDefault();
-      actions.finishKeyboardMovement();
-      if (activePointerIdRef.current !== null || dragRef.current || activeStrokeRef.current) {
-        actions.cancelInteraction();
-      }
-      actions.onToolSelect(tool);
-    };
-
-    const handleKeyUp = (event: globalThis.KeyboardEvent) => {
-      if (event.key.startsWith("Arrow")) {
-        keyboardActionsRef.current.finishKeyboardMovement();
-      }
-    };
-
-    const handleWindowBlur = () => {
-      keyboardActionsRef.current.finishKeyboardMovement();
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    window.addEventListener("blur", handleWindowBlur);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-      window.removeEventListener("blur", handleWindowBlur);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
     const screenPoint = getPoint(event);
 
     if (activePointerIdRef.current === event.pointerId && cropRef.current && cropRef.current.activeHandle) {
-      const logical = screenToLogical(screenPoint, viewportRef.current);
+      const logical = toLogicalPoint(screenPoint);
       const local = getCropLocalCoordinates(logical.x, logical.y, cropRef.current.element);
       
       const c = cropRef.current;
@@ -1500,13 +1216,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       return;
     }
 
-    if (activePointerIdRef.current === event.pointerId && activeTool === "hand" && panRef.current) {
-      const pan = panRef.current;
-      viewportRef.current = {
-        offsetX: pan.originOffsetX + (screenPoint.x - pan.pointerStartX),
-        offsetY: pan.originOffsetY + (screenPoint.y - pan.pointerStartY),
-        scale: viewportRef.current.scale,
-      };
+    if (activePointerIdRef.current === event.pointerId && activeTool === "hand" && hasPan()) {
+      updatePan(screenPoint);
       renderCanvas(
         canvasRef.current,
         strokesRef.current,
@@ -1517,7 +1228,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       return;
     }
 
-    const point = screenToLogical(screenPoint, viewportRef.current);
+    const point = toLogicalPoint(screenPoint);
 
     if (activePointerIdRef.current !== event.pointerId) {
       if (activeTool === "hand") {
@@ -1551,6 +1262,30 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "select") {
+      const rotation = rotationRef.current;
+      if (rotation) {
+        let deltaAngle = Math.atan2(point.y - rotation.centerY, point.x - rotation.centerX)
+          - rotation.initialPointerAngle;
+        if (deltaAngle > Math.PI) {
+          deltaAngle -= Math.PI * 2;
+        } else if (deltaAngle < -Math.PI) {
+          deltaAngle += Math.PI * 2;
+        }
+
+        applyRotation(
+          rotation.selections,
+          rotation.originals,
+          rotation.originalElements,
+          deltaAngle,
+          { x: rotation.centerX, y: rotation.centerY },
+          elementsRef.current,
+        );
+        rotation.moved = rotation.moved || Math.abs(deltaAngle) > 0.0001;
+        alignmentGuidesRef.current = [];
+        drawCanvas();
+        return;
+      }
+
       if (activePointerIdRef.current === event.pointerId && marqueeRef.current) {
         const marquee = marqueeRef.current;
         marquee.currentX = point.x;
@@ -1751,13 +1486,14 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     if (activeTool === "hand") {
-      panRef.current = null;
+      finishPan();
       activePointerIdRef.current = null;
       event.currentTarget.releasePointerCapture(event.pointerId);
       event.currentTarget.style.cursor = "grab";
       return;
     }
 
+    let createdSelection: Selection | null = null;
 
     if (activeTool === "rectangle") {
       const rectangle = activeRectangleRef.current;
@@ -1765,6 +1501,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       if (rectangle && rectangle.width > 0 && rectangle.height > 0) {
         elementsRef.current.push(rectangle);
         creationOrderRef.current.push({ kind: "element", value: rectangle });
+        createdSelection = { kind: "element", value: rectangle };
       }
       activeRectangleRef.current = null;
       activeRectangleStartRef.current = null;
@@ -1774,6 +1511,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
       if (circle && circle.width > 0 && circle.height > 0) {
         elementsRef.current.push(circle);
         creationOrderRef.current.push({ kind: "element", value: circle });
+        createdSelection = { kind: "element", value: circle };
       }
       activeCircleRef.current = null;
       activeCircleStartRef.current = null;
@@ -1783,6 +1521,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (arrow && (arrow.startX !== arrow.endX || arrow.startY !== arrow.endY)) {
           elementsRef.current.push(arrow);
           creationOrderRef.current.push({ kind: "element", value: arrow });
+          createdSelection = { kind: "element", value: arrow };
         }
         activeArrowRef.current = null;
         activeArrowStartRef.current = null;
@@ -1792,6 +1531,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (line && (line.startX !== line.endX || line.startY !== line.endY)) {
           elementsRef.current.push(line);
           creationOrderRef.current.push({ kind: "element", value: line });
+          createdSelection = { kind: "element", value: line };
         }
         activeLineRef.current = null;
         activeLineStartRef.current = null;
@@ -1801,11 +1541,16 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (rect && rect.width > 0 && rect.height > 0) {
           elementsRef.current.push(rect);
           creationOrderRef.current.push({ kind: "element", value: rect });
+          createdSelection = { kind: "element", value: rect };
         }
         activeRoundedRectangleRef.current = null;
         activeRoundedRectangleStartRef.current = null;
       } else {
-      activeStrokeRef.current = null;
+        const stroke = activeStrokeRef.current;
+        activeStrokeRef.current = null;
+        if (stroke && activeTool === "draw") {
+          createdSelection = { kind: "stroke", value: stroke };
+        }
     }
 
     if (activeTool === "select") {
@@ -1819,12 +1564,11 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
 
         if (event.type === "pointercancel") {
           selectionRef.current = [...preMarqueeSelectionRef.current];
-          notifyLayerChange();
           drawCanvas();
           return;
         }
 
-        const point = screenToLogical(getPoint(event), viewportRef.current);
+        const point = toLogicalPoint(getPoint(event));
         const dx = Math.abs(point.x - marquee.startX);
         const dy = Math.abs(point.y - marquee.startY);
 
@@ -1850,14 +1594,12 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
               selectionRef.current = marqueeSelections;
             }
           }
-          notifyLayerChange();
         } else {
           if (marqueeShiftRef.current) {
             selectionRef.current = [...preMarqueeSelectionRef.current];
           } else {
             selectionRef.current = [];
           }
-          notifyLayerChange();
         }
 
         drawCanvas();
@@ -1892,7 +1634,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (!multiDrag.moved) {
           selectionRef.current = [multiDrag.clicked];
           resetDuplicateState(duplicateStateRef.current);
-          notifyLayerChange();
         } else {
           resetDuplicateState(duplicateStateRef.current);
         }
@@ -1924,6 +1665,15 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
 
     activePointerIdRef.current = null;
+    if (createdSelection) {
+      selectionRef.current = [createdSelection];
+      resetDuplicateState(duplicateStateRef.current);
+      onToolSelect("select");
+      drawCanvas();
+      addHistory();
+      return;
+    }
+
     renderCanvas(
       canvasRef.current,
       strokesRef.current,
@@ -1981,7 +1731,6 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         if (selection.kind === "group" && !groupsRef.current.some(g => g.id === selection.value.id)) return false;
         return true;
       });
-      notifyLayerChange();
       renderCanvas(
         canvasRef.current,
         strokesRef.current,
@@ -2044,24 +1793,23 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
               setIsCropping(false);
               drawCanvas();
             }}
-            className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+            className="px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={async () => {
               if (cropRef.current) {
-                const newImg = await applyCrop(cropRef.current);
-                const idx = elementsRef.current.findIndex(e => e.id === newImg.id);
-                if (idx !== -1) elementsRef.current[idx] = newImg;
-                const cIdx = creationOrderRef.current.findIndex(c => c.kind === "element" && c.value.id === newImg.id);
-                if (cIdx !== -1) creationOrderRef.current[cIdx] = { kind: "element", value: newImg };
-                selectionRef.current = [{ kind: "element", value: newImg }];
+                const croppedElement = await applyCrop(cropRef.current);
+                const index = elementsRef.current.findIndex(e => e.id === croppedElement.id);
+                if (index !== -1) {
+                  elementsRef.current[index] = croppedElement;
+                }
+                cropRef.current = null;
+                setIsCropping(false);
+                drawCanvas();
                 addHistory();
               }
-              cropRef.current = null;
-              setIsCropping(false);
-              drawCanvas();
             }}
             className="px-4 py-1.5 rounded-lg text-sm font-medium bg-teal-600 text-white hover:bg-teal-700 transition-colors"
           >

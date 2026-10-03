@@ -1,34 +1,15 @@
 "use client";
 
-import type { LayerAvailability, LayerOperation } from "@/editor/layering";
-import { LayerControls } from "@/components/LayerControls";
-import { GroupControls } from "@/components/GroupControls";
-import { AlignControls } from "@/components/AlignControls";
-import { LockControls } from "@/components/LockControls";
 import { useEffect, useRef, useState } from "react";
-import type { AlignOperation } from "@/types/canvas";
+import { useTheme } from "@/components/ThemeProvider";
 
 type BoardHeaderProps = {
   boardName: string;
   onBoardNameChange: (name: string) => void;
-  onNewDocument?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
-  layerAvailability: LayerAvailability;
-  onLayerOperation: (operation: LayerOperation) => void;
-  canGroup?: boolean;
-  canUngroup?: boolean;
-  onGroup?: () => void;
-  onUngroup?: () => void;
-  canAlign?: boolean;
-  canDistribute?: boolean;
-  onAlign?: (operation: AlignOperation) => void;
-  canLock?: boolean;
-  canUnlock?: boolean;
-  onLock?: () => void;
-  onUnlock?: () => void;
   activePanel: "layers" | "properties" | null;
   onTogglePanel: (panel: "layers" | "properties") => void;
   /** Called when the user clicks Export PNG. */
@@ -37,81 +18,29 @@ type BoardHeaderProps = {
   onExportSvg?: () => void;
   /** Called when the user clicks Export SketchFlow. */
   onExportSketchFlow?: () => void;
-  /** Called when the user selects a file to import. */
-  onImportDocument?: (file: File) => void;
+  onNewDocument?: () => void;
 };
 
 export function BoardHeader({
+  boardName,
+  onBoardNameChange,
   canUndo = false,
   canRedo = false,
   onUndo,
   onRedo,
-  layerAvailability,
-  onLayerOperation,
-  canGroup = false,
-  canUngroup = false,
-  onGroup,
-  onUngroup,
-  canAlign = false,
-  canDistribute = false,
-  onAlign,
-  canLock = false,
-  canUnlock = false,
-  onLock,
-  onUnlock,
   activePanel,
   onTogglePanel,
   onExportPng,
   onExportSvg,
   onExportSketchFlow,
-  onImportDocument,
-  boardName,
-  onBoardNameChange,
   onNewDocument,
 }: BoardHeaderProps) {
+  const { theme, toggleTheme } = useTheme();
   const [exportOpen, setExportOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState(boardName);
-  const inputRef = useRef<HTMLInputElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onImportDocument?.(file);
-    }
-    // Clear the input value so the same file can be imported again if needed
-    if (e.target) {
-      e.target.value = "";
-    }
-  };
-
-  useEffect(() => {
-    if (isEditing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [isEditing]);
-
-  useEffect(() => {
-    setEditingName(boardName);
-  }, [boardName]);
-
-  const handleSaveName = () => {
-    const trimmedName = editingName.trim();
-    if (trimmedName && trimmedName !== boardName) onBoardNameChange(trimmedName);
-    else if (!trimmedName) setEditingName(boardName);
-    setIsEditing(false);
-  };
-
-  const handleNameKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") handleSaveName();
-    if (event.key === "Escape") {
-      setEditingName(boardName);
-      setIsEditing(false);
-    }
-  };
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Close export popover when clicking outside
   useEffect(() => {
@@ -135,32 +64,78 @@ export function BoardHeader({
     return () => document.removeEventListener("keydown", handler);
   }, [exportOpen]);
 
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  // Sync editing name when boardName changes externally
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditingName(boardName);
+  }, [boardName]);
+
+  const handleStartEditing = () => {
+    setEditingName(boardName);
+    setIsEditing(true);
+  };
+
+  const handleSaveName = () => {
+    const trimmedName = editingName.trim();
+    if (trimmedName && trimmedName !== boardName) {
+      onBoardNameChange(trimmedName);
+    } else if (!trimmedName) {
+      setEditingName(boardName);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelEditing = () => {
+    setEditingName(boardName);
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleSaveName();
+    } else if (e.key === "Escape") {
+      handleCancelEditing();
+    }
+  };
+
   return (
-    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7">
+    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7 dark:bg-slate-900/90 dark:border-slate-700/80">
       {/* Left: logo + board name */}
       <div className="flex min-w-0 items-center gap-4">
         <div className="flex items-center gap-2.5">
           <span className="flex size-8 items-center justify-center rounded-xl bg-teal-600 text-sm font-bold text-white shadow-sm shadow-teal-600/20">
             S
           </span>
-          <span className="text-[15px] font-semibold tracking-tight text-slate-950">
+          <span className="text-[15px] font-semibold tracking-tight text-slate-950 dark:text-slate-50">
             SketchFlow
           </span>
         </div>
-        <span className="hidden h-5 w-px bg-slate-200 sm:block" />
+        <span className="hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-700" />
         {isEditing ? (
           <input
             ref={inputRef}
             type="text"
             value={editingName}
-            onChange={(event) => setEditingName(event.target.value)}
-            onKeyDown={handleNameKeyDown}
+            onChange={(e) => setEditingName(e.target.value)}
+            onKeyDown={handleKeyDown}
             onBlur={handleSaveName}
-            className="w-32 truncate border-b border-slate-300 bg-transparent px-1 py-0.5 text-sm text-slate-500 focus:border-teal-500 focus:outline-none sm:w-48"
-            aria-label="Board name"
+            className="truncate text-sm text-slate-500 bg-transparent border-b border-slate-300 focus:outline-none focus:border-teal-500 px-1 py-0.5 w-32 sm:w-48 dark:text-slate-400 dark:border-slate-600 dark:focus:border-teal-500"
+            placeholder="Board name"
           />
         ) : (
-          <p className="truncate cursor-pointer text-sm text-slate-500" onClick={() => { setEditingName(boardName); setIsEditing(true); }} title="Rename board">
+          <p
+            className="truncate text-sm text-slate-500 cursor-pointer hover:text-slate-700 transition-colors dark:text-slate-400 dark:hover:text-slate-200"
+            onClick={handleStartEditing}
+            title="Click to rename board"
+          >
             {boardName}
           </p>
         )}
@@ -168,33 +143,40 @@ export function BoardHeader({
 
       {/* Right: controls */}
       <div className="flex items-center gap-2">
-        <span className="mr-1 hidden text-xs text-slate-400 lg:block">
+        <span className="mr-1 hidden text-xs text-slate-400 lg:block dark:text-slate-500">
           Draw. Think. Collaborate.
         </span>
 
-        <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block" />
+        <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-700" />
 
-        <LockControls
-          canLock={canLock}
-          canUnlock={canUnlock}
-          onLock={onLock || (() => {})}
-          onUnlock={onUnlock || (() => {})}
-        />
+        {/* Theme toggle */}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+        >
+          {theme === "light" ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="4" />
+              <path d="M12 2v2" />
+              <path d="M12 20v2" />
+              <path d="m4.93 4.93 1.41 1.41" />
+              <path d="m17.66 17.66 1.41 1.41" />
+              <path d="M2 12h2" />
+              <path d="M20 12h2" />
+              <path d="m6.34 17.66-1.41 1.41" />
+              <path d="m19.07 4.93-1.41 1.41" />
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+            </svg>
+          )}
+        </button>
 
-        <GroupControls
-          canGroup={canGroup}
-          canUngroup={canUngroup}
-          onGroup={onGroup || (() => {})}
-          onUngroup={onUngroup || (() => {})}
-        />
-
-        <AlignControls
-          canAlign={canAlign}
-          canDistribute={canDistribute}
-          onAlign={onAlign || (() => {})}
-        />
-
-        <LayerControls {...layerAvailability} onLayerOperation={onLayerOperation} />
+        <div className="mx-2 hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-700" />
 
         {/* Undo / Redo */}
         <button
@@ -203,7 +185,7 @@ export function BoardHeader({
           disabled={!canUndo}
           aria-label="Undo"
           title="Undo"
-          className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:disabled:hover:text-slate-400"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7v6h6" />
@@ -216,7 +198,7 @@ export function BoardHeader({
           disabled={!canRedo}
           aria-label="Redo"
           title="Redo"
-          className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="inline-flex size-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-500 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100 dark:disabled:hover:text-slate-400"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 7v6h-6" />
@@ -224,28 +206,8 @@ export function BoardHeader({
           </svg>
         </button>
 
-        <div className="mx-1 h-5 w-px bg-slate-200" />
+        <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-        {/* Panel toggles */}
-        <button
-          type="button"
-          onClick={() => onTogglePanel("layers")}
-          aria-label={activePanel === "layers" ? "Close layers panel" : "Open layers panel"}
-          title="Layers"
-          className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition ${
-            activePanel === "layers"
-              ? "bg-teal-50 text-teal-800"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          }`}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="12 2 2 7 12 12 22 7 12 2" />
-            <polyline points="2 12 12 17 22 12" />
-            <polyline points="2 17 12 22 22 17" />
-          </svg>
-          <span className="hidden sm:inline">Layers</span>
-        </button>
-        <div className="w-px h-4 bg-slate-200 mx-0.5" />
         <button
           type="button"
           onClick={() => onTogglePanel("properties")}
@@ -253,8 +215,8 @@ export function BoardHeader({
           title="Properties"
           className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition ${
             activePanel === "properties"
-              ? "bg-teal-50 text-teal-800"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+              ? "bg-teal-50 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
           }`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -263,41 +225,22 @@ export function BoardHeader({
           </svg>
           <span className="hidden sm:inline">Properties</span>
         </button>
-
-        <div className="mx-1 h-5 w-px bg-slate-200" />
-
+        <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
         <button
           type="button"
           onClick={onNewDocument}
           aria-label="New document"
           title="New document"
-          className="inline-flex h-8 items-center rounded-lg px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+          className="inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
         >
-          New
-        </button>
-
-        {/* Import button */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          accept=".sketchflow.json,.json"
-          onChange={handleFileChange}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          title="Import"
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 active:scale-[0.97]"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
+ <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="12" y1="18" x2="12" y2="12" />
+            <line x1="9" y1="15" x2="15" y2="15" />
           </svg>
-          <span>Import</span>
+          <span className="hidden sm:inline">New</span>
         </button>
-
         {/* Export popover */}
         <div ref={exportRef} className="relative">
           <button
@@ -324,7 +267,7 @@ export function BoardHeader({
             <div
               role="menu"
               aria-label="Export options"
-              className="absolute right-0 top-full z-50 mt-1.5 w-44 origin-top-right rounded-xl border border-slate-200/80 bg-white shadow-xl ring-1 ring-black/5 focus:outline-none"
+              className="absolute right-0 top-full z-50 mt-1.5 w-44 origin-top-right rounded-xl border border-slate-200/80 bg-white shadow-xl ring-1 ring-black/5 focus:outline-none dark:border-slate-700/80 dark:bg-slate-800 dark:ring-white/10"
             >
               <div className="p-1.5 flex flex-col gap-0.5">
                 <button
@@ -332,9 +275,9 @@ export function BoardHeader({
                   id="export-png-button"
                   role="menuitem"
                   onClick={() => { setExportOpen(false); onExportPng?.(); }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                 >
-                  <span className="flex size-6 items-center justify-center rounded-md bg-teal-50 text-teal-600 text-[10px] font-bold">PNG</span>
+                  <span className="flex size-6 items-center justify-center rounded-md bg-teal-50 text-teal-600 text-[10px] font-bold dark:bg-teal-900/30 dark:text-teal-300">PNG</span>
                   Export PNG
                 </button>
                 <button
@@ -342,20 +285,20 @@ export function BoardHeader({
                   id="export-svg-button"
                   role="menuitem"
                   onClick={() => { setExportOpen(false); onExportSvg?.(); }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                 >
-                  <span className="flex size-6 items-center justify-center rounded-md bg-violet-50 text-violet-600 text-[10px] font-bold">SVG</span>
+                  <span className="flex size-6 items-center justify-center rounded-md bg-violet-50 text-violet-600 text-[10px] font-bold dark:bg-violet-900/30 dark:text-violet-300">SVG</span>
                   Export SVG
                 </button>
-                <div className="mx-2 my-0.5 h-px bg-slate-100" />
+                <div className="mx-2 my-0.5 h-px bg-slate-100 dark:bg-slate-700" />
                 <button
                   type="button"
                   id="export-sketchflow-button"
                   role="menuitem"
                   onClick={() => { setExportOpen(false); onExportSketchFlow?.(); }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 dark:text-slate-200 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                 >
-                  <span className="flex size-6 items-center justify-center rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold">SF</span>
+                  <span className="flex size-6 items-center justify-center rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold dark:bg-slate-700 dark:text-slate-300">SF</span>
                   Export SketchFlow
                 </button>
               </div>
