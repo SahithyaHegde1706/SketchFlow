@@ -10,9 +10,8 @@ import type {
   TextElement,
   WhiteboardElement,
 } from "@/types/canvas";
-import { distanceBetweenPoints, distanceToSegment } from "./geometry";
+import { distanceBetweenPoints, distanceToSegment, rotatePoint } from "../geometry/geometry";
 import { getSelectionBounds } from "./selection";
-import { rotatePoint } from "./geometry";
 import { getElementCenter } from "@/editor/rotation";
 
 export const ERASER_TOLERANCE = 8;

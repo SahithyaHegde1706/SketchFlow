@@ -1,7 +1,7 @@
 import type { Bounds, Point, ResizeHandle, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
-import { getBounds, getStrokeBounds, rotatePoint } from "./geometry";
+import { getBounds, getStrokeBounds, rotatePoint } from "../geometry/geometry";
 import { getElementCenter } from "@/editor/rotation";
-import { getTextBounds } from "./text";
+import { getTextBounds } from "../renderer/text";
 import { isItemLocked, isAnySelectionLocked } from "@/editor/locking";
 
 function getElementBounds(context: CanvasRenderingContext2D, element: WhiteboardElement): Bounds {
