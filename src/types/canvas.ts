@@ -109,6 +109,14 @@ export type ImageElement = {
   locked?: boolean;
   flipX?: boolean;
   flipY?: boolean;
+  opacity?: number;
+  strokeColor?: string;
+  strokeWidth?: number;
+  cornerRadius?: number;
+  shadowColor?: string;
+  shadowBlur?: number;
+  shadowOffsetX?: number;
+  shadowOffsetY?: number;
 };
 
 export type WhiteboardElement =
@@ -232,16 +240,6 @@ export type RotationState = {
   initialPointerAngle: number;
   moved: boolean;
 };
-
-export type AlignOperation =
-  | "align-left"
-  | "align-center"
-  | "align-right"
-  | "align-top"
-  | "align-middle"
-  | "align-bottom"
-  | "distribute-horizontal"
-  | "distribute-vertical";
 
 export type MarqueeState = {
   /** X coordinate of where the drag started, in logical (canvas) coordinates. */
