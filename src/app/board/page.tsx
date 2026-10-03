@@ -10,7 +10,7 @@ import { PropertiesPanel } from "@/components/board/properties/PropertiesPanel";
 import { saveToLocalStorage, loadFromLocalStorage, clearAutosave, createDebouncedAutosave } from "@/document/autosave";
 import { useTheme } from "@/components/ThemeProvider";
 
-import type { Tool, CreationRecord, Group, SelectionSet, WhiteboardElement, CanvasSettings } from "@/types/canvas";
+import type { Tool, CreationRecord, Group, SelectionSet, CanvasSettings } from "@/types/canvas";
 
 export default function BoardPage() {
   const { theme } = useTheme();
@@ -117,6 +117,10 @@ export default function BoardPage() {
     }
   };
 
+  const boardElements = documentState.records
+    .filter((record): record is Extract<CreationRecord, { kind: "element" }> => record.kind === "element")
+    .map((record) => record.value);
+
   return (
     <main className="flex h-dvh min-h-150 flex-col overflow-hidden bg-slate-50 text-slate-950 relative dark:bg-slate-900 dark:text-slate-50">
       <BoardHeader
@@ -134,7 +138,16 @@ export default function BoardPage() {
         onNewDocument={handleNewDocument}
       />
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
-        <ToolRail activeTool={activeTool} onToolSelect={setActiveTool} onImageSelect={(file) => boardRef.current?.addImage?.(file)} />
+        <ToolRail
+          activeTool={activeTool}
+          onToolSelect={setActiveTool}
+          onImageSelect={(file) => boardRef.current?.addImage?.(file)}
+          selections={documentState.selections}
+          elements={boardElements}
+          canvasSettings={canvasSettings}
+          onUpdateTextColor={(color) => boardRef.current?.updateTextColor(color)}
+          onUpdateCanvasSettings={setCanvasSettings}
+        />
         <BoardCanvas
           ref={boardRef}
           activeTool={activeTool}
@@ -162,7 +175,7 @@ export default function BoardPage() {
             {activePanel === "properties" && (
               <PropertiesPanel
                 selections={documentState.selections}
-                elements={documentState.records.map(r => r.kind === "element" ? r.value : null).filter(Boolean) as WhiteboardElement[]}
+                elements={boardElements}
                 groups={documentState.groups}
                 canvasSettings={canvasSettings}
                 onUpdateProperties={(updates, commitHistory) => boardRef.current?.updateProperties(updates, commitHistory)}

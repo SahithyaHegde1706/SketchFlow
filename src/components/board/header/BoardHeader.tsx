@@ -211,8 +211,8 @@ export function BoardHeader({
         <button
           type="button"
           onClick={() => onTogglePanel("properties")}
-          aria-label={activePanel === "properties" ? "Close properties panel" : "Open properties panel"}
-          title="Properties"
+          aria-label={activePanel === "properties" ? "Close edit panel" : "Open edit panel"}
+          title="Edit selection and canvas settings"
           className={`inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-sm font-medium transition ${
             activePanel === "properties"
               ? "bg-teal-50 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300"
@@ -223,7 +223,7 @@ export function BoardHeader({
             <path d="M12 20h9"/>
             <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
           </svg>
-          <span className="hidden sm:inline">Properties</span>
+          <span className="hidden sm:inline">Edit</span>
         </button>
         <div className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
         <button

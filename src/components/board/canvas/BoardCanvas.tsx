@@ -97,6 +97,7 @@ export type BoardCanvasHandle = {
   deleteSelection: () => void;
   setSelection: (selections: SelectionSet) => void;
   updateProperties: (updates: Partial<WhiteboardElement>, commitHistory?: boolean) => void;
+  updateTextColor: (color: string) => void;
   applyLayerOperation: (operation: LayerOperation) => void;
   group: () => void;
   ungroup: () => void;
@@ -128,6 +129,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
   const activeStrokeRef = useRef<FreehandStroke | null>(null);
   const clipboardRef = useRef<ClipboardState>({ item: null });
   const duplicateStateRef = useRef<DuplicateState>(createDuplicateState());
+  const toolbarSelectionSignatureRef = useRef<string | null>(null);
   const activeRectangleRef = useRef<RectangleElement | null>(null);
   const activeRectangleStartRef = useRef<Point | null>(null);
   const activeCircleRef = useRef<CircleElement | null>(null);
@@ -176,6 +178,24 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     if (cropRef.current && canvasRef.current) {
       const ctx = canvasRef.current.getContext("2d");
       if (ctx) renderCropOverlay(ctx, cropRef.current, viewportRef.current);
+    }
+
+    const selectedElements = selectionRef.current.flatMap((selection) => {
+      if (selection.kind === "element") return [selection.value];
+      if (selection.kind === "group") {
+        return selection.value.elementIds
+          .map((id) => elementsRef.current.find((element) => element.id === id))
+          .filter((element): element is WhiteboardElement => Boolean(element));
+      }
+      return [];
+    });
+    const toolbarSelectionSignature = selectedElements
+      .map((element) => `${element.id}:${element.type}:${element.type === "text" ? element.strokeColor : ""}`)
+      .sort()
+      .join("|");
+    if (toolbarSelectionSignatureRef.current !== toolbarSelectionSignature) {
+      toolbarSelectionSignatureRef.current = toolbarSelectionSignature;
+      onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
     }
   };
 
@@ -567,6 +587,32 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     }
   };
 
+  const handleUpdateTextColor = (color: string) => {
+    if (selectionRef.current.length === 0 || isAnySelectionLocked(selectionRef.current, elementsRef.current)) return;
+
+    let changed = false;
+    for (const selection of selectionRef.current) {
+      if (selection.kind === "element" && selection.value.type === "text") {
+        selection.value.strokeColor = color;
+        changed = true;
+      } else if (selection.kind === "group" && !isItemLocked(selection.value, elementsRef.current)) {
+        for (const id of selection.value.elementIds) {
+          const element = elementsRef.current.find((candidate) => candidate.id === id);
+          if (element?.type === "text" && !element.locked) {
+            element.strokeColor = color;
+            changed = true;
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      drawCanvas();
+      addHistory();
+      resetDuplicateState(duplicateStateRef.current);
+    }
+  };
+
   const handleExportCanvas = (format: "png" | "svg" | "sketchflow", backgroundColor: string, boardName?: string) => {
     // Export is a read-only operation; it must NOT modify any editor state.
     const strokes       = strokesRef.current;
@@ -633,6 +679,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     deleteSelection: handleDeleteSelection,
     setSelection: handleSetSelection,
     updateProperties: handleUpdateProperties,
+    updateTextColor: handleUpdateTextColor,
     applyLayerOperation: handleLayerOperation,
     group: handleGroup,
     ungroup: handleUngroup,

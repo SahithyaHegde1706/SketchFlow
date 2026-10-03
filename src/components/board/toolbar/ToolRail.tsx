@@ -1,4 +1,4 @@
-import type { Tool } from "@/types/canvas";
+import type { CanvasSettings, SelectionSet, TextElement, Tool, WhiteboardElement } from "@/types/canvas";
 
 const tools = [
   { label: "Hand / Pan", icon: "✦", value: "hand" },
@@ -17,12 +17,43 @@ type ToolRailProps = {
   activeTool: Tool;
   onToolSelect: (tool: Tool) => void;
   onImageSelect?: (file: File) => void;
+  selections: SelectionSet;
+  elements: WhiteboardElement[];
+  canvasSettings: CanvasSettings;
+  onUpdateTextColor: (color: string) => void;
+  onUpdateCanvasSettings: (settings: CanvasSettings) => void;
 };
 
 import { useRef } from "react";
 
-export function ToolRail({ activeTool, onToolSelect, onImageSelect }: ToolRailProps) {
+export function ToolRail({
+  activeTool,
+  onToolSelect,
+  onImageSelect,
+  selections,
+  elements,
+  canvasSettings,
+  onUpdateTextColor,
+  onUpdateCanvasSettings,
+}: ToolRailProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedElementIds = new Set<string>();
+  const selectedTextElements = new Map<string, TextElement>();
+  for (const selection of selections) {
+    if (selection.kind === "element") {
+      if (selection.value.type === "text") selectedTextElements.set(selection.value.id, selection.value);
+    } else if (selection.kind === "group") {
+      for (const id of selection.value.elementIds) selectedElementIds.add(id);
+    }
+  }
+  for (const element of elements) {
+    if (selectedElementIds.has(element.id) && element.type === "text") selectedTextElements.set(element.id, element);
+  }
+  const selectedTextColorValues = Array.from(selectedTextElements.values()).map((element) => element.strokeColor);
+  const textColors = new Set(selectedTextColorValues);
+  const textColor = textColors.size === 1 ? selectedTextColorValues[0] : undefined;
+  const hasMixedTextColors = textColors.size > 1;
 
   const handleToolClick = (toolValue: Tool) => {
     if (toolValue === "image") {
@@ -64,6 +95,43 @@ export function ToolRail({ activeTool, onToolSelect, onImageSelect }: ToolRailPr
           </button>
         ))}
       </nav>
+      <div className="flex flex-col gap-1 border-t border-slate-200 pt-1 dark:border-slate-700">
+        <label className="relative flex size-10 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-teal-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Background Color">
+          <span className="sr-only">Background Color</span>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3v18M3 12h18" />
+            <path d="M5 5h14v14H5z" />
+          </svg>
+          <span aria-hidden="true" className="absolute bottom-1.5 h-1 w-5 rounded-full border border-slate-400/40" style={{ backgroundColor: canvasSettings.backgroundColor }} />
+          <input
+            type="color"
+            aria-label="Background Color"
+            title="Background Color"
+            value={canvasSettings.backgroundColor}
+            onChange={(event) => onUpdateCanvasSettings({ ...canvasSettings, backgroundColor: event.target.value })}
+            className="absolute inset-0 size-full cursor-pointer opacity-0"
+          />
+        </label>
+        <label className="relative flex size-10 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-teal-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Text Color">
+          <span className="sr-only">Text Color</span>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 3 3 18M15 3 9 21M4 8h16M3 16h16" />
+          </svg>
+          <span
+            aria-hidden="true"
+            className={`absolute bottom-1.5 h-1 w-5 rounded-full border border-slate-400/40 ${hasMixedTextColors ? "bg-[linear-gradient(90deg,#ef4444_0_33%,#22c55e_33%_66%,#3b82f6_66%)]" : ""}`}
+            style={hasMixedTextColors ? undefined : { backgroundColor: textColor || "#0f172a" }}
+          />
+          <input
+            type="color"
+            aria-label="Text Color"
+            title="Text Color"
+            value={textColor || "#0f172a"}
+            onChange={(event) => onUpdateTextColor(event.target.value)}
+            className="absolute inset-0 size-full cursor-pointer opacity-0"
+          />
+        </label>
+      </div>
       <input
         type="file"
         ref={fileInputRef}

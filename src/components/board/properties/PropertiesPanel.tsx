@@ -59,17 +59,6 @@ export function PropertiesPanel({ selections, elements, canvasSettings, onUpdate
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <label className="text-sm text-slate-600 dark:text-slate-400">Background</label>
-            <input
-              type="color"
-              value={canvasSettings.backgroundColor}
-              onChange={(e) => onUpdateCanvasSettings({ ...canvasSettings, backgroundColor: e.target.value })}
-              className="w-8 h-8 rounded cursor-pointer border-0 p-0 bg-transparent"
-              title="Background Color"
-            />
-          </div>
-
-          <div className="flex items-center justify-between">
             <label className="text-sm text-slate-600 dark:text-slate-400">Grid</label>
             <label className="relative inline-flex items-center cursor-pointer">
               <input
