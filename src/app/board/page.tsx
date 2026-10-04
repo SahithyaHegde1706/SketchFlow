@@ -1,23 +1,24 @@
 "use client";
 
 import { useRef, useState, useEffect, useMemo, useCallback } from "react";
-import { BoardCanvas } from "@/components/board/canvas/BoardCanvas";
-import type { BoardCanvasHandle } from "@/components/board/canvas/BoardCanvas";
+import { BoardCanvas, type BoardCanvasHandle } from "@/components/board/canvas/BoardCanvas";
 import { BoardHeader } from "@/components/board/header/BoardHeader";
 import { ToolRail } from "@/components/board/toolbar/ToolRail";
 import { LayersPanel } from "@/components/board/layers/LayersPanel";
 import { PropertiesPanel } from "@/components/board/properties/PropertiesPanel";
+import { CanvasSettingsPanel } from "@/components/board/properties/CanvasSettingsPanel";
 import { saveToLocalStorage, loadFromLocalStorage, createDebouncedAutosave } from "@/document/autosave";
 import { createDefaultCanvasSettings, DEFAULT_DOCUMENT_NAME, isDefaultDocumentBackground } from "@/document/defaults";
 import { useTheme } from "@/components/ThemeProvider";
 
-import type { Tool, CreationRecord, Group, SelectionSet, CanvasSettings } from "@/types/canvas";
+import type { Tool, SelectionSet } from "@/types/editor";
+import type { CreationRecord, Group, CanvasSettings } from "@/types/canvas";
 
 export default function BoardPage() {
   const { theme } = useTheme();
   const themeRef = useRef(theme);
   const [activeTool, setActiveTool] = useState<Tool>("select");
-  const [activePanel, setActivePanel] = useState<"layers" | "properties" | null>("properties");
+  const [activePanel, setActivePanel] = useState<"layers" | "properties" | "canvas-settings" | null>(null);
   const [documentState, setDocumentState] = useState({
     records: [] as CreationRecord[],
     groups: [] as Group[],
@@ -159,6 +160,7 @@ export default function BoardPage() {
           canvasSettings={canvasSettings}
           onUpdateTextColor={(color) => boardRef.current?.updateTextColor(color)}
           onUpdateCanvasSettings={setCanvasSettings}
+          onOpenCanvasSettings={() => setActivePanel("canvas-settings")}
         />
         <BoardCanvas
           ref={boardRef}
@@ -169,7 +171,11 @@ export default function BoardPage() {
           onHistoryChange={(canUndo, canRedo) => setHistoryStatus({ canUndo, canRedo })}
           onDocumentChange={(records, groups, selections) => {
             setDocumentState({ records, groups, selections });
-            if (selections.length > 0) setActivePanel("properties");
+            if (selections.length > 0) {
+              setActivePanel("properties");
+            } else {
+              setActivePanel((current) => current === "properties" ? null : current);
+            }
           }}
         />
         {activePanel && (
@@ -192,10 +198,18 @@ export default function BoardPage() {
                 selections={documentState.selections}
                 elements={boardElements}
                 groups={documentState.groups}
-                canvasSettings={canvasSettings}
                 onUpdateProperties={(updates, commitHistory) => boardRef.current?.updateProperties(updates, commitHistory)}
-                onUpdateCanvasSettings={setCanvasSettings}
+                onSetLocked={(locked) => {
+                  if (locked) boardRef.current?.lock();
+                  else boardRef.current?.unlock();
+                }}
                 onStartCrop={() => boardRef.current?.startCrop()}
+              />
+            )}
+            {activePanel === "canvas-settings" && (
+              <CanvasSettingsPanel
+                canvasSettings={canvasSettings}
+                onUpdateCanvasSettings={setCanvasSettings}
                 onClose={() => setActivePanel(null)}
               />
             )}

@@ -1,14 +1,6 @@
-import type {
-  AlignmentGuide,
-  Bounds,
-  FreehandStroke,
-  Group,
-  Selection,
-  SelectionSet,
-  SnapSettings,
-  Viewport,
-  WhiteboardElement,
-} from "@/types/canvas";
+import type { AlignmentGuide, Bounds, Viewport } from "@/types/geometry";
+import type { FreehandStroke, Group, SnapSettings, WhiteboardElement } from "@/types/canvas";
+import type { Selection, SelectionSet } from "@/types/editor";
 import { getSelectionBounds } from "@/canvas/interaction/selection";
 
 export type SnapResult = {

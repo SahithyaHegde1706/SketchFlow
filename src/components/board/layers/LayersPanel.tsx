@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import type { CreationRecord, Group, SelectionSet, WhiteboardElement, Selection } from "@/types/canvas";
+import type { CreationRecord, Group, WhiteboardElement } from "@/types/canvas";
+import type { SelectionSet, Selection } from "@/types/editor";
 import type { LayerOperation } from "@/editor/layering";
 import { isItemLocked } from "@/editor/locking";
 

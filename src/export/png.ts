@@ -1,18 +1,3 @@
-/**
- * PNG export — Step 35
- *
- * Renders the complete whiteboard document onto an offscreen canvas and
- * triggers a browser file download.
- *
- * - Operates in document/logical coordinates; ignores viewport pan/zoom.
- * - Never draws: selection outlines, handles, guides, grid, UI chrome.
- * - Does NOT modify any editor state, selection, or history.
- * - Clamps output to 4096 px on the longest axis; scales proportionally.
- * - Properly transforms logical coordinates → output pixels so no content is clipped.
- * - Uses the canonical creationOrder array for z-order (reproducing the exact
- *   layer order seen in the editor).
- */
-
 import type { CreationRecord, FreehandStroke, WhiteboardElement } from "@/types/canvas";
 import {
   drawRectangle,
@@ -32,14 +17,6 @@ import { waitForImage } from "@/canvas/renderer/images";
 /** Maximum pixel dimension for any single axis of the exported PNG. */
 export const MAX_DIM = 4096;
 
-/**
- * Export the whiteboard as PNG and trigger a browser download.
- *
- * @param strokes           All freehand strokes.
- * @param elements          All whiteboard elements.
- * @param backgroundColor   Background fill colour (e.g. "#f8fafc").
- * @param creationOrder     Canonical interleaved layer-order array from creationOrderRef.
- */
 export function exportToPng(
   strokes: FreehandStroke[],
   elements: WhiteboardElement[],
@@ -129,10 +106,6 @@ async function exportToPngAsync(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Drawing helpers
-// ---------------------------------------------------------------------------
-
 function drawCustomStroke(ctx: CanvasRenderingContext2D, stroke: FreehandStroke): void {
   const strokeColor =
     (stroke as unknown as { strokeColor?: string; color?: string }).strokeColor ??
@@ -160,10 +133,6 @@ function drawElement(
   else if (el.type === "image" && !failedImageSources.has(el.src)) drawImageElement(ctx, el, () => {});
 }
 
-// ---------------------------------------------------------------------------
-// Download helper
-// ---------------------------------------------------------------------------
-
 function triggerDownload(href: string, filename: string): void {
   const a = document.createElement("a");
   a.href = href;
@@ -172,4 +141,3 @@ function triggerDownload(href: string, filename: string): void {
   a.click();
   document.body.removeChild(a);
 }
-

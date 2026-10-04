@@ -1,10 +1,5 @@
-export type Point = {
-  x: number;
-  y: number;
-};
-
+import type { Point } from "./geometry";
 export type FreehandStroke = Point[] & { locked?: boolean };
-
 export type RectangleElement = {
   id: string;
   type: "rectangle";
@@ -134,95 +129,9 @@ export type Group = {
   locked?: boolean;
 };
 
-export type Selection =
-  | { kind: "stroke"; value: FreehandStroke }
-  | { kind: "element"; value: WhiteboardElement }
-  | { kind: "group"; value: Group };
-
-export type SelectionSet = Selection[];
-
-export type Tool =
-  | "select"
-  | "hand"
-  | "rectangle"
-  | "roundedRectangle"
-  | "circle"
-  | "arrow"
-  | "line"
-  | "text"
-  | "image"
-  | "draw"
-  | "eraser";
-
-export type TextEditorState = {
-  x: number;
-  y: number;
-  value: string;
-};
-
 export type CreationRecord =
   | { kind: "stroke"; value: FreehandStroke }
   | { kind: "element"; value: WhiteboardElement };
-
-export type ResizeHandle = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "rotate";
-
-export type DragState = {
-  selection: Selection;
-  pointerStart: Point;
-  original: FreehandStroke | WhiteboardElement | Group;
-  type: "move" | "resize";
-  handle?: ResizeHandle;
-};
-
-export type MultiDragState = {
-  selections: Selection[];
-  originals: (FreehandStroke | WhiteboardElement | Group)[];
-  pointerStart: Point;
-  clicked: Selection;
-  moved: boolean;
-  originalBounds?: Bounds;
-};
-
-export type Bounds = {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-};
-
-export type Viewport = {
-  offsetX: number;
-  offsetY: number;
-  scale: number;
-};
-
-export type PanState = {
-  pointerStartX: number;
-  pointerStartY: number;
-  originOffsetX: number;
-  originOffsetY: number;
-};
-
-export type SnapSettings = {
-  enabled: boolean;
-  gridEnabled: boolean;
-  gridSize: number;
-  threshold: number;
-};
-
-export type AlignmentGuide =
-  | {
-      type: "vertical";
-      position: number;
-      start: number;
-      end: number;
-    }
-  | {
-      type: "horizontal";
-      position: number;
-      start: number;
-      end: number;
-    };
 
 export type CanvasSettings = {
   backgroundColor: string;
@@ -232,36 +141,9 @@ export type CanvasSettings = {
   snapSettings: SnapSettings;
 };
 
-export type RotationState = {
-  selections: Selection[];
-  originals: (FreehandStroke | WhiteboardElement | Group)[];
-  originalElements: WhiteboardElement[];
-  centerX: number;
-  centerY: number;
-  initialPointerAngle: number;
-  moved: boolean;
-};
-
-export type MarqueeState = {
-  /** X coordinate of where the drag started, in logical (canvas) coordinates. */
-  startX: number;
-  /** Y coordinate of where the drag started, in logical (canvas) coordinates. */
-  startY: number;
-  /** Current X coordinate of the pointer, in logical (canvas) coordinates. */
-  currentX: number;
-  /** Current Y coordinate of the pointer, in logical (canvas) coordinates. */
-  currentY: number;
-};
-
-export type CropHandle = "crop-top-left" | "crop-top-right" | "crop-bottom-left" | "crop-bottom-right";
-
-export type CropState = {
-  element: ImageElement;
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  activeHandle?: CropHandle;
-  pointerStart?: Point;
-  initialCrop?: { left: number; top: number; right: number; bottom: number };
+export type SnapSettings = {
+  enabled: boolean;
+  gridEnabled: boolean;
+  gridSize: number;
+  threshold: number;
 };

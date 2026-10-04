@@ -1,4 +1,6 @@
-import type { ArrowElement, CircleElement, Group, Point, RectangleElement, Selection, FreehandStroke, WhiteboardElement, LineElement, RoundedRectangleElement } from "@/types/canvas";
+import type { ArrowElement, CircleElement, Group, RectangleElement, FreehandStroke, WhiteboardElement, LineElement, RoundedRectangleElement } from "@/types/canvas";
+import type { Point } from "@/types/geometry";
+import type { Selection } from "@/types/editor";
 import { STROKE_COLOR, STROKE_WIDTH } from "@/canvas/renderer/renderer";
 
 export function createRectangle(start: Point, end: Point): RectangleElement {

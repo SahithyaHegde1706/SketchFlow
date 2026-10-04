@@ -1,9 +1,4 @@
-import type {
-  CanvasSettings,
-  FreehandStroke,
-  Group,
-  WhiteboardElement,
-} from "@/types/canvas";
+import type { CanvasSettings, FreehandStroke, Group, WhiteboardElement } from "@/types/canvas";
 
 export type SerializedCreationRecord =
   | { kind: "stroke"; index: number }

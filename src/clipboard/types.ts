@@ -1,4 +1,5 @@
-import type { CreationRecord, Group, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { CreationRecord, Group, WhiteboardElement } from "@/types/canvas";
+import type { Selection, SelectionSet } from "@/types/editor";
 
 export type ClipboardState = {
   item: {

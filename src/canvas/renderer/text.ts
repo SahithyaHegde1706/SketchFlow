@@ -1,4 +1,5 @@
-import type { Bounds, TextElement } from "@/types/canvas";
+import type { Bounds } from "@/types/geometry";
+import type { TextElement } from "@/types/canvas";
 
 export function buildTextFont(element: TextElement): string {
   const style = element.fontStyle || "normal";

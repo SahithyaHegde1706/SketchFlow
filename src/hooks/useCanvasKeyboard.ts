@@ -1,35 +1,15 @@
-import { useEffect, useRef } from "react";
-import type { KeyboardEvent } from "react";
-import { getToolForShortcut, hasShortcutModifier, isTextEditingTarget } from "@/editor/shortcuts";
-import type { LayerOperation } from "@/editor/layering";
-import type { Tool } from "@/types/canvas";
+import { useEffect, useRef, type KeyboardEvent } from "react";
+import {
+  handleCanvasKeyDown,
+  handleCanvasKeyUp,
+  handleCanvasWindowBlur,
+  handleTextInputKeyDown,
+  type KeyboardActions,
+  type KeyboardHandlerOptions,
+} from "@/hooks/keyboardHandlers";
 
-type CanvasKeyboardActions = {
-  finishKeyboardMovement: () => void;
-  moveSelectedByKeyboard: (deltaX: number, deltaY: number) => boolean;
-  cancelInteraction: () => void;
-  handleCopy: () => void;
-  handleDuplicate: () => void;
-  handlePaste: () => void;
-  handleRedo: () => void;
-  handleUndo: () => void;
-  handleLayerOperation: (operation: LayerOperation) => void;
-  notifyClipboardChange: () => void;
-  onToolSelect: (tool: Tool) => void;
-  handleGroup: () => void;
-  handleUngroup: () => void;
-  deleteSelection: () => void;
-  handleLock: () => void;
-  handleUnlock: () => void;
-};
-
-type UseCanvasKeyboardOptions = {
-  actions: CanvasKeyboardActions;
-  isTextEditorActive: () => boolean;
-  cancelText: () => void;
-  commitText: () => void;
-  hasActiveInteraction: () => boolean;
-  clearSelection: () => void;
+type UseCanvasKeyboardOptions = Omit<KeyboardHandlerOptions, "actions"> & {
+  actions: KeyboardActions;
 };
 
 export function useCanvasKeyboard({
@@ -48,125 +28,22 @@ export function useCanvasKeyboard({
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      const currentActions = actionsRef.current;
-      if (isTextEditingTarget(event.target)) {
-        return;
-      }
-
-      if (event.key === "Escape") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        if (isTextEditorActive()) {
-          cancelText();
-        } else if (hasActiveInteraction()) {
-          currentActions.cancelInteraction();
-        } else {
-          clearSelection();
-          currentActions.notifyClipboardChange();
-        }
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        currentActions.finishKeyboardMovement();
-        currentActions.deleteSelection();
-        return;
-      }
-
-      const isMac = navigator.userAgent.toLowerCase().includes("mac");
-      const modifierKey = isMac ? event.metaKey : event.ctrlKey;
-      const layerModifierKey = event.ctrlKey || event.metaKey;
-      const layerShortcut = layerModifierKey && (
-        event.code === "BracketRight" || event.code === "BracketLeft"
-      );
-      if (layerShortcut) {
-        event.preventDefault();
-        currentActions.finishKeyboardMovement();
-        const operation: LayerOperation = event.code === "BracketRight"
-          ? event.shiftKey ? "bring-to-front" : "bring-forward"
-          : event.shiftKey ? "send-to-back" : "send-backward";
-        currentActions.handleLayerOperation(operation);
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "z") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        if (event.shiftKey) currentActions.handleRedo();
-        else currentActions.handleUndo();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "c") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        currentActions.handleCopy();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "v") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        currentActions.handlePaste();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "d") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        currentActions.handleDuplicate();
-        return;
-      }
-      if (modifierKey && event.key.toLowerCase() === "g") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        if (event.shiftKey) currentActions.handleUngroup();
-        else currentActions.handleGroup();
-        return;
-      }
-      if (modifierKey && event.shiftKey && event.key.toLowerCase() === "l") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        currentActions.handleLock();
-        return;
-      }
-      if (modifierKey && event.shiftKey && event.key.toLowerCase() === "u") {
-        currentActions.finishKeyboardMovement();
-        event.preventDefault();
-        currentActions.handleUnlock();
-        return;
-      }
-      if (hasShortcutModifier(event)) {
-        return;
-      }
-
-      const movement = {
-        ArrowUp: { deltaX: 0, deltaY: event.shiftKey ? -10 : -1 },
-        ArrowDown: { deltaX: 0, deltaY: event.shiftKey ? 10 : 1 },
-        ArrowLeft: { deltaX: event.shiftKey ? -10 : -1, deltaY: 0 },
-        ArrowRight: { deltaX: event.shiftKey ? 10 : 1, deltaY: 0 },
-      }[event.key];
-      if (movement) {
-        if (currentActions.moveSelectedByKeyboard(movement.deltaX, movement.deltaY)) {
-          event.preventDefault();
-        }
-        return;
-      }
-
-      const tool = getToolForShortcut(event.key);
-      if (!tool) return;
-      event.preventDefault();
-      currentActions.finishKeyboardMovement();
-      if (hasActiveInteraction()) {
-        currentActions.cancelInteraction();
-      }
-      currentActions.onToolSelect(tool);
+      handleCanvasKeyDown(event, {
+        actions: actionsRef.current,
+        isTextEditorActive,
+        cancelText,
+        commitText,
+        hasActiveInteraction,
+        clearSelection,
+      });
     };
 
     const handleKeyUp = (event: globalThis.KeyboardEvent) => {
-      if (event.key.startsWith("Arrow")) {
-        actionsRef.current.finishKeyboardMovement();
-      }
+      handleCanvasKeyUp(event, actionsRef.current);
     };
 
     const handleWindowBlur = () => {
-      actionsRef.current.finishKeyboardMovement();
+      handleCanvasWindowBlur(actionsRef.current);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -181,12 +58,6 @@ export function useCanvasKeyboard({
   }, []);
 
   return (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      commitText();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      cancelText();
-    }
+    handleTextInputKeyDown(event, { commitText, cancelText });
   };
 }

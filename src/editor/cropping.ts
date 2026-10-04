@@ -1,4 +1,5 @@
-import type { ImageElement, CropState } from "@/types/canvas";
+import type { ImageElement } from "@/types/canvas";
+import type { CropState } from "@/types/editor";
 
 export function getCropLocalCoordinates(
   x: number,

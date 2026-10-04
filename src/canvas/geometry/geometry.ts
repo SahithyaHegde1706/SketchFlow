@@ -1,4 +1,5 @@
-import type { Bounds, FreehandStroke, Point, Viewport } from "@/types/canvas";
+import type { Bounds, Point, Viewport } from "@/types/geometry";
+import type { FreehandStroke } from "@/types/canvas";
 
 export function distanceBetweenPoints(first: Point, second: Point) {
   return Math.hypot(first.x - second.x, first.y - second.y);
@@ -48,13 +49,6 @@ export function screenToLogical(point: Point, viewport: Viewport): Point {
   return {
     x: (point.x - viewport.offsetX) / viewport.scale,
     y: (point.y - viewport.offsetY) / viewport.scale,
-  };
-}
-
-export function logicalToScreen(point: Point, viewport: Viewport): Point {
-  return {
-    x: point.x * viewport.scale + viewport.offsetX,
-    y: point.y * viewport.scale + viewport.offsetY,
   };
 }
 

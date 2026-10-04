@@ -1,4 +1,5 @@
-import type { CanvasSettings, SelectionSet, TextElement, Tool, WhiteboardElement } from "@/types/canvas";
+import type { CanvasSettings, TextElement, WhiteboardElement } from "@/types/canvas";
+import type { SelectionSet, Tool } from "@/types/editor";
 
 const tools = [
   { label: "Hand / Pan", icon: "✦", value: "hand" },
@@ -22,6 +23,7 @@ type ToolRailProps = {
   canvasSettings: CanvasSettings;
   onUpdateTextColor: (color: string) => void;
   onUpdateCanvasSettings: (settings: CanvasSettings) => void;
+  onOpenCanvasSettings: () => void;
 };
 
 import { useRef } from "react";
@@ -35,6 +37,7 @@ export function ToolRail({
   canvasSettings,
   onUpdateTextColor,
   onUpdateCanvasSettings,
+  onOpenCanvasSettings,
 }: ToolRailProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -131,6 +134,18 @@ export function ToolRail({
             className="absolute inset-0 size-full cursor-pointer opacity-0"
           />
         </label>
+        <button
+          type="button"
+          aria-label="Canvas Settings"
+          title="Canvas Settings"
+          onClick={onOpenCanvasSettings}
+          className="flex size-10 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+        >
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.7 2.94-.08-.02a1.7 1.7 0 0 0-1.75.54l-.05.07h-3.4l-.05-.07a1.7 1.7 0 0 0-1.75-.54l-.08.02-1.7-2.94.06-.06A1.7 1.7 0 0 0 9.6 15l-.08-.04v-3.4l.08-.04a1.7 1.7 0 0 0-.34-1.88L9.2 9.58l1.7-2.94.08.02a1.7 1.7 0 0 0 1.75-.54l.05-.07h3.4l.05.07a1.7 1.7 0 0 0 1.75.54l.08-.02 1.7 2.94-.06.06a1.7 1.7 0 0 0-.34 1.88l.08.04v3.4z" />
+          </svg>
+        </button>
       </div>
       <input
         type="file"

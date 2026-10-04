@@ -1,4 +1,6 @@
-import type { Bounds, FreehandStroke, ResizeHandle, Selection, WhiteboardElement } from "@/types/canvas";
+import type { Bounds, ResizeHandle } from "@/types/geometry";
+import type { FreehandStroke, WhiteboardElement } from "@/types/canvas";
+import type { Selection } from "@/types/editor";
 import { getBounds, getStrokeBounds, rotatePoint } from "@/canvas/geometry/geometry";
 import { getElementCenter } from "@/editor/rotation";
 import { getTextBounds } from "@/canvas/renderer/text";

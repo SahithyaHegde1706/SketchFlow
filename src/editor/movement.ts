@@ -1,4 +1,5 @@
-import type { FreehandStroke, Selection, WhiteboardElement, Group } from "@/types/canvas";
+import type { FreehandStroke, WhiteboardElement, Group } from "@/types/canvas";
+import type { Selection } from "@/types/editor";
 
 export function moveSelection(
   selection: Selection,

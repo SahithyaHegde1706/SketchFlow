@@ -1,4 +1,4 @@
-import type { Tool } from "@/types/canvas";
+import type { Tool } from "@/types/editor";
 
 const toolShortcuts: Record<string, Tool> = {
   v: "select",

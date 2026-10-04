@@ -1,10 +1,4 @@
-import type {
-  CanvasSettings,
-  CreationRecord,
-  FreehandStroke,
-  Group,
-  WhiteboardElement,
-} from "@/types/canvas";
+import type { CanvasSettings, CreationRecord, FreehandStroke, Group, WhiteboardElement } from "@/types/canvas";
 import type { SketchFlowDocumentV1, SerializedCreationRecord } from "./types";
 
 /**

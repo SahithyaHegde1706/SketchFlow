@@ -1,22 +1,10 @@
-import type { Bounds, CreationRecord, Group, MarqueeState, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { Bounds } from "@/types/geometry";
+import type { CreationRecord, Group, WhiteboardElement } from "@/types/canvas";
+import type { MarqueeState, SelectionSet } from "@/types/editor";
 import { getSelectionBounds } from "@/canvas/interaction/selection";
 
-/**
- * Minimum logical-coordinate movement (in either axis) required to treat a
- * pointer gesture as a marquee drag rather than a click.
- *
- * Below this threshold, pointerup on empty canvas behaves like a click
- * (clears the selection) rather than creating an empty marquee.
- */
 export const MIN_MARQUEE_DISTANCE = 4;
 
-/**
- * Convert a raw MarqueeState (start + current pointer positions) into a
- * normalized axis-aligned Bounds.
- *
- * Normalizing ensures that dragging in all four directions produces the same
- * correct bounding box regardless of which corner the user started from.
- */
 export function normalizeMarqueeBounds(state: MarqueeState): Bounds {
   return {
     left: Math.min(state.startX, state.currentX),
@@ -26,12 +14,6 @@ export function normalizeMarqueeBounds(state: MarqueeState): Bounds {
   };
 }
 
-/**
- * Returns true when itemBounds is COMPLETELY inside marqueeBounds.
- *
- * A partially-overlapping item does NOT qualify — the item must be fully
- * enclosed on all four sides.
- */
 export function isFullyContained(itemBounds: Bounds, marqueeBounds: Bounds): boolean {
   return (
     itemBounds.left >= marqueeBounds.left &&

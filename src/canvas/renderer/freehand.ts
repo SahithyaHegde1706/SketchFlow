@@ -1,19 +1,8 @@
-import type { FreehandStroke, Point } from "@/types/canvas";
+import type { FreehandStroke } from "@/types/canvas";
+import type { Point } from "@/types/geometry";
 
-/**
- * Minimum logical-coordinate distance between two consecutive sampled points.
- *
- * Operating in logical (canvas) coordinates means the threshold is zoom-invariant:
- * a stroke drawn at 50% zoom uses the same minimum distance as one drawn at 200%.
- */
 export const FREEHAND_MIN_DISTANCE = 3;
 
-/**
- * Returns true when `next` is far enough from `last` to be worth storing.
- *
- * Call this in pointermove before pushing the new point. Very small pointer
- * jitter (sub-3-logical-unit movement) is silently discarded.
- */
 export function shouldSamplePoint(last: Point, next: Point): boolean {
   const dx = next.x - last.x;
   const dy = next.y - last.y;
@@ -21,21 +10,6 @@ export function shouldSamplePoint(last: Point, next: Point): boolean {
   return dx * dx + dy * dy >= FREEHAND_MIN_DISTANCE * FREEHAND_MIN_DISTANCE;
 }
 
-/**
- * Draws a freehand stroke onto `ctx` using midpoint quadratic Bézier smoothing.
- *
- * Technique:
- *   – 1 point  → filled circle arc (single-click dot)
- *   – 2 points → straight line segment (already smooth enough)
- *   – 3+ points → midpoint quadratic Bézier spline
- *
- * The midpoint spline works by treating each stored point as a "control point"
- * and drawing the curve through the midpoints between consecutive pairs. This
- * avoids sharp kinks at every sample without requiring heavy curve fitting.
- *
- * Hit-testing continues to operate on the raw stored points (unchanged), so
- * selection and eraser remain consistent with what the user drew.
- */
 export function drawFreehandStroke(
   ctx: CanvasRenderingContext2D,
   stroke: FreehandStroke,
@@ -77,18 +51,6 @@ export function drawFreehandStroke(
     ctx.restore();
     return;
   }
-
-  // --- Three or more points: midpoint quadratic Bézier spline ---
-  //
-  // For points p[0], p[1], …, p[N-1]:
-  //   Start at the midpoint of p[0]–p[1] (so the curve begins smoothly).
-  //   For each interior point p[i], draw a quadratic curve with control point
-  //   p[i] and endpoint at mid(p[i], p[i+1]).
-  //   Finish with a straight segment to p[N-1] so the tail meets the last
-  //   actual pointer position precisely.
-  //
-  // This is a well-known lightweight smoothing technique compatible with the
-  // native Canvas 2D API. No extra dependencies required.
 
   const first = stroke[0]!;
   const second = stroke[1]!;

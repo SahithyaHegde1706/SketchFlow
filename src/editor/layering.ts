@@ -1,4 +1,5 @@
-import type { CreationRecord, SelectionSet } from "@/types/canvas";
+import type { CreationRecord } from "@/types/canvas";
+import type { SelectionSet } from "@/types/editor";
 
 export type LayerOperation =
   | "bring-forward"

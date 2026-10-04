@@ -1,4 +1,5 @@
-import type { CreationRecord, Group, Selection, SelectionSet, WhiteboardElement, FreehandStroke } from "@/types/canvas";
+import type { CreationRecord, Group, WhiteboardElement, FreehandStroke } from "@/types/canvas";
+import type { Selection, SelectionSet } from "@/types/editor";
 import type { ClipboardState, DuplicateState } from "./types";
 
 export function createDuplicateState(): DuplicateState {
@@ -103,44 +104,6 @@ export function copyToClipboard(
   };
 }
 
-export function getClipboard(state: ClipboardState) {
-  if (!state.item) {
-    return null;
-  }
-  
-  // Return deep clone to prevent accidental mutations by caller
-  const item = state.item;
-  const elementsCopy: WhiteboardElement[] = JSON.parse(JSON.stringify(item.elements));
-  const groupsCopy: Group[] = JSON.parse(JSON.stringify(item.groups));
-  const selectionsCopy = item.selections.map(sel => {
-    if (sel.kind === "stroke") {
-      const strokeCopy: FreehandStroke = sel.value.map(p => ({ ...p }));
-      if (sel.value.locked) strokeCopy.locked = true;
-      return { kind: "stroke" as const, value: strokeCopy };
-    }
-    return sel;
-  });
-
-  const creationRecordsCopy = item.creationRecords
-    ? item.creationRecords.map(rec => {
-        if (rec.kind === "element") {
-          const found = elementsCopy.find(e => e.id === rec.value.id);
-          return found ? { kind: "element" as const, value: found } : rec;
-        }
-        const strokeCopy: FreehandStroke = rec.value.map(p => ({ ...p }));
-        if (rec.value.locked) strokeCopy.locked = true;
-        return { kind: "stroke" as const, value: strokeCopy };
-      })
-    : undefined;
-
-  return {
-    selections: selectionsCopy,
-    elements: elementsCopy,
-    groups: groupsCopy,
-    ...(creationRecordsCopy ? { creationRecords: creationRecordsCopy } : {}),
-  };
-}
-
 export function offsetSelection(selection: Selection, offsetAmount: number = 20): Selection {
   if (selection.kind === "stroke") {
     // Strokes don't have IDs. Offset every point by offsetAmount.
@@ -193,10 +156,6 @@ export function offsetSelection(selection: Selection, offsetAmount: number = 20)
   }
 
   return { kind: "element", value: newElement };
-}
-
-export function offsetSelections(selections: SelectionSet, offsetAmount: number = 20): SelectionSet {
-  return selections.map(selection => offsetSelection(selection, offsetAmount));
 }
 
 export function offsetClipboard(clipboard: NonNullable<ClipboardState["item"]>, offsetAmount = 20) {

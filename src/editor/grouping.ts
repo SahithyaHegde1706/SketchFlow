@@ -1,4 +1,5 @@
-import type { Group, Selection, SelectionSet, WhiteboardElement } from "@/types/canvas";
+import type { Group, WhiteboardElement } from "@/types/canvas";
+import type { Selection, SelectionSet } from "@/types/editor";
 
 export function getSelectedGroups(selection: SelectionSet): Group[] {
   return selection

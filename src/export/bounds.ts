@@ -1,21 +1,5 @@
-/**
- * Export bounds calculation — Step 35
- *
- * Calculates the exact axis-aligned visual bounding box of all drawable
- * document content (strokes + elements) with 32 logical pixels of padding.
- *
- * Accounts for:
- * - stroke widths on all primitives
- * - rotated elements using actual rotated AABBs (corners rotated around pivot)
- * - text metrics and formatting via src/canvas/renderer/text.ts
- * - multiline text and rotated text
- * - arrowheads and line endpoints
- * - single-point freehand dots and multi-point smoothed freehand paths
- * - groups through their drawable member elements
- * - 1024x768 fallback for empty documents
- */
-
-import type { Bounds, FreehandStroke, Point, WhiteboardElement } from "@/types/canvas";
+import type { Bounds, Point } from "@/types/geometry";
+import type { FreehandStroke, WhiteboardElement } from "@/types/canvas";
 import { getBounds, rotatePoint } from "@/canvas/geometry/geometry";
 import { getElementCenter } from "@/editor/rotation";
 import { getTextBounds } from "@/canvas/renderer/text";
@@ -43,10 +27,6 @@ function getMeasureContext(): CanvasRenderingContext2D | null {
   return cachedMeasureContext;
 }
 
-/**
- * Compute the export bounding box covering all drawable content, expanded
- * by EXPORT_PADDING (32px) on all sides.
- */
 export function computeExportBounds(
   strokes: FreehandStroke[],
   elements: WhiteboardElement[],
@@ -77,10 +57,6 @@ export function computeExportBounds(
   return { left, top, right, bottom };
 }
 
-/**
- * Calculate visual bounds for a freehand stroke, including stroke thickness
- * and round end-caps.
- */
 export function strokeBounds(stroke: FreehandStroke): Bounds | null {
   if (stroke.length === 0) return null;
 
@@ -119,10 +95,6 @@ export function strokeBounds(stroke: FreehandStroke): Bounds | null {
   };
 }
 
-/**
- * Calculate visual bounds for a whiteboard element, accounting for stroke width,
- * arrowheads, text metrics, and rotation.
- */
 export function elementVisualBounds(
   el: WhiteboardElement,
   context: CanvasRenderingContext2D | null,

@@ -1,15 +1,6 @@
-import type {
-  ArrowElement,
-  CircleElement,
-  CreationRecord,
-  FreehandStroke,
-  Point,
-  RectangleElement,
-  RoundedRectangleElement,
-  Selection,
-  TextElement,
-  WhiteboardElement,
-} from "@/types/canvas";
+import type { ArrowElement, CircleElement, CreationRecord, FreehandStroke, RectangleElement, RoundedRectangleElement, TextElement, WhiteboardElement } from "@/types/canvas";
+import type { Point } from "@/types/geometry";
+import type { Selection } from "@/types/editor";
 import { distanceBetweenPoints, distanceToSegment, rotatePoint } from "../geometry/geometry";
 import { getSelectionBounds } from "./selection";
 import { getElementCenter } from "@/editor/rotation";
@@ -93,10 +84,7 @@ export function isPointNearImage(point: Point, image: { x: number; y: number; wi
   const top = image.y;
   const bottom = image.y + image.height;
   
-  if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) {
-    return true;
-  }
-  return false;
+  return point.x >= left && point.x <= right && point.y >= top && point.y <= bottom;
 }
 
 export function isPointOnStroke(point: Point, stroke: FreehandStroke) {
