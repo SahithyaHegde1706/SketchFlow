@@ -8,8 +8,8 @@ SketchFlow is a browser-based whiteboard for drawing and arranging ideas on an i
 
 - Freehand pen, eraser, rectangles, rounded rectangles, circles, lines, arrows, and text
 - Select and multi-select elements; move, resize, rotate, and delete them
-- Copy, paste, and duplicate selections; group and ungroup; lock and unlock elements
-- Reorder layers, with undo and redo support
+- Copy, paste, and duplicate selections; lock and unlock elements
+- Undo and redo support
 - Keyboard shortcuts for common editing actions and selection nudging
 
 ### Canvas
@@ -39,63 +39,10 @@ SketchFlow is a browser-based whiteboard for drawing and arranging ideas on an i
 - HTML Canvas API
 - pnpm 11.3.0
 
-## Project structure
+## Screenshots:- 
+<img width="1901" height="912" alt="image" src="https://github.com/user-attachments/assets/813a2e95-5dcc-4f36-b530-7864ffd09cdb" />
 
-```text
-src/
-├── app/                  # Landing page and board routes
-├── components/
-│   ├── board/
-│   │   ├── canvas/       # Canvas UI, state, and interaction wiring
-│   │   ├── header/
-│   │   ├── layers/
-│   │   ├── properties/
-│   │   └── toolbar/
-│   ├── brand/
-│   ├── landing/
-│   └── ThemeProvider.tsx
-├── canvas/
-│   ├── geometry/         # Canvas coordinates and bounds
-│   ├── interaction/      # Hit testing and selection geometry
-│   └── renderer/         # Canvas drawing for shapes, images, text, and overlays
-├── clipboard/            # Copy, paste, and duplicate data
-├── document/             # Document defaults, serialization, and autosave
-│   └── autosave/         # Browser storage and validation
-├── editor/               # Editing, snapping, grouping, and layering operations
-├── export/               # PNG, SVG, and SketchFlow JSON export
-│   └── svg/
-├── history/              # Undo and redo history
-├── hooks/                # Canvas viewport and keyboard hooks
-└── types/                # Shared canvas, editor, and geometry types
-```
-
-## Canvas architecture
-
-`BoardCanvas` connects React state and hooks to the canvas and delegates drawing, creation, selection, editing, keyboard, and pointer handling to focused modules. Canvas rendering is separated from editor operations and geometry helpers. History manages undo and redo snapshots; document modules handle serialization and local autosave; export modules generate PNG, SVG, and SketchFlow JSON downloads.
-
-The board sidebar switches between selected-element properties and Canvas Settings. The toolbar, layers panel, and board header provide the surrounding editing controls.
-
-## Getting started
-
-Clone the repository, install dependencies, and start the development server:
-
-```bash
-git clone https://github.com/SahithyaHegde1706/SketchFlow.git
-cd SketchFlow
-pnpm install
-pnpm dev
-```
-
-No environment variables are required by the current project configuration.
-
-## Available scripts
-
-- `pnpm dev` — start the development server
-- `pnpm build` — create a production build
-- `pnpm start` — serve the production build
-- `pnpm lint` — run ESLint
-
-To check TypeScript types, run `pnpm exec tsc --noEmit`.
+<img width="1903" height="907" alt="image" src="https://github.com/user-attachments/assets/4a03fdef-6beb-4a5a-8419-27008858ebf5" />
 
 ## Project status
 
