@@ -137,7 +137,7 @@ export default function BoardPage() {
     .map((record) => record.value);
 
   return (
-    <main className="flex h-dvh min-h-150 flex-col overflow-hidden bg-slate-50 text-slate-950 relative dark:bg-slate-900 dark:text-slate-50">
+    <main className="relative flex h-dvh min-h-0 flex-col overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-900 dark:text-slate-50">
       <BoardHeader
         boardName={boardName}
         onBoardNameChange={setBoardName}
@@ -179,7 +179,7 @@ export default function BoardPage() {
           }}
         />
         {activePanel && (
-          <div className="absolute right-0 top-16 bottom-0 w-64 bg-white/95 backdrop-blur border-l border-slate-200/80 shadow-xl flex flex-col z-50 transform transition-transform dark:bg-slate-800/95 dark:border-slate-700/80">
+          <div className="absolute right-0 top-0 bottom-0 z-50 flex w-[min(16rem,calc(100vw-4rem))] flex-col border-l border-slate-200/80 bg-white/95 shadow-xl backdrop-blur transition-transform dark:border-slate-700/80 dark:bg-slate-800/95">
             {activePanel === "layers" && (
               <LayersPanel
                 isOpen={true}

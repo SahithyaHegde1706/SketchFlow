@@ -14,7 +14,7 @@ export function HeroContent() {
       </p>
 
       {/* Heading */}
-      <h1 className="text-[52px] sm:text-[58px] lg:text-[72px] font-[800] tracking-tight text-slate-900 leading-[1.05] mb-5 font-sans dark:text-slate-50">
+      <h1 className="text-[clamp(2.5rem,9vw,3.625rem)] lg:text-[72px] font-[800] tracking-tight text-slate-900 leading-[1.05] mb-5 font-sans dark:text-slate-50">
         Turn ideas into<br />
         <span className="relative text-teal-600 inline-block mt-2 dark:text-teal-400">
           visual reality.

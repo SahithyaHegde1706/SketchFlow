@@ -104,9 +104,9 @@ export function BoardHeader({
   };
 
   return (
-    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/90 px-5 backdrop-blur md:px-7 dark:bg-slate-900/90 dark:border-slate-700/80">
+    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200/80 bg-white/90 px-2 backdrop-blur sm:px-5 md:px-7 dark:bg-slate-900/90 dark:border-slate-700/80">
       {/* Left: logo + board name */}
-      <div className="flex min-w-0 items-center gap-4">
+      <div className="flex min-w-0 items-center gap-2 sm:gap-4">
         <SketchFlowLogo href="/" />
         <span className="hidden h-5 w-px bg-slate-200 sm:block dark:bg-slate-700" />
         {isEditing ? (
@@ -132,7 +132,7 @@ export function BoardHeader({
       </div>
 
       {/* Right: controls */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         <span className="mr-1 hidden text-xs text-slate-400 lg:block dark:text-slate-500">
           Draw. Think. Collaborate.
         </span>
@@ -222,7 +222,7 @@ export function BoardHeader({
             aria-expanded={exportOpen}
             onClick={() => setExportOpen((v) => !v)}
             title="Export"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600 px-3 text-sm font-semibold text-white shadow-sm shadow-teal-600/20 transition hover:bg-teal-700 hover:border-teal-700 active:scale-[0.97]"
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600 px-2 sm:px-3 text-sm font-semibold text-white shadow-sm shadow-teal-600/20 transition hover:bg-teal-700 hover:border-teal-700 active:scale-[0.97]"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />

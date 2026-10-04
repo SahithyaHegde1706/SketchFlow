@@ -29,17 +29,8 @@ function applyTheme(theme: Theme) {
 function initializeTheme() {
   if (themeInitialized) return;
 
-  // Check localStorage or system preference
   const savedTheme = localStorage.getItem("theme") as Theme | null;
-  let initialTheme: Theme;
-
-  if (savedTheme) {
-    initialTheme = savedTheme;
-  } else {
-    // Check system preference
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    initialTheme = prefersDark ? "dark" : "light";
-  }
+  const initialTheme: Theme = savedTheme === "dark" ? "dark" : "light";
 
   currentTheme = initialTheme;
   themeInitialized = true;

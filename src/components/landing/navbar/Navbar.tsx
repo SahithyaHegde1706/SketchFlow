@@ -18,7 +18,7 @@ export function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center bg-slate-100/80 rounded-full p-1 mr-1 dark:bg-slate-800/80">
+            <div className="flex items-center bg-slate-100/80 rounded-full p-1 mr-1 dark:bg-slate-800/80">
               <button
                 onClick={toggleTheme}
                 aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}

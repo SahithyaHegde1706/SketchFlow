@@ -11,7 +11,7 @@ export function HeroVisual() {
       </svg>
 
       {/* Whiteboard mock */}
-      <div className="relative rounded-2xl bg-white border border-teal-200/80 dark:bg-slate-800 dark:border-slate-700 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col h-[520px]">
+      <div className="relative rounded-2xl bg-white border border-teal-200/80 dark:bg-slate-800 dark:border-slate-700 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] overflow-hidden flex flex-col h-[340px] sm:h-[420px] lg:h-[520px]">
         {/* Mini header */}
         <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100 shrink-0 dark:bg-slate-800 dark:border-slate-700">
           <div className="flex items-center gap-2">
@@ -88,7 +88,8 @@ export function HeroVisual() {
           </div>
         </div>
 
-        <div className="flex flex-1 relative bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px]">
+        <div className="relative flex flex-1 overflow-hidden bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px]">
+          <div className="absolute inset-0 h-[154%] w-[154%] origin-top-left scale-[0.65] sm:h-full sm:w-full sm:scale-100">
           {/* Vertical Toolbar */}
           <div className="absolute left-3 top-1/2 -translate-y-1/2 w-10 py-3 bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col items-center gap-2 z-10">
             <div className="w-8 h-8 rounded-lg bg-[#ede9fe] text-[#7c3aed] flex items-center justify-center">
@@ -209,6 +210,7 @@ export function HeroVisual() {
               <path d="M9 20c-4-4-4-10 0-14" />
               <path d="M5 10l4 -4l4 4" />
             </svg>
+          </div>
           </div>
 
           {/* Bottom Zoom Controls */}

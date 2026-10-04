@@ -80,8 +80,8 @@ export function ToolRail({
   };
 
   return (
-    <aside className="absolute left-4 top-4 z-10 flex flex-col gap-1 rounded-2xl border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] backdrop-blur md:left-6 md:top-6 dark:border-slate-700/90 dark:bg-slate-800/95 dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
-      <nav aria-label="Whiteboard tools" className="flex flex-col gap-1">
+    <aside className="absolute bottom-2 left-2 right-2 top-auto z-10 flex flex-row items-start gap-1 rounded-2xl border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] backdrop-blur sm:bottom-auto sm:left-4 sm:right-auto sm:top-4 sm:flex-col md:left-6 md:top-6 dark:border-slate-700/90 dark:bg-slate-800/95 dark:shadow-[0_8px_30px_rgba(0,0,0,0.3)]">
+      <nav aria-label="Whiteboard tools" className="flex min-w-0 flex-1 flex-row flex-wrap gap-1 sm:flex-none sm:flex-col">
         {tools.map((tool) => (
           <button
             key={tool.label}
@@ -98,7 +98,7 @@ export function ToolRail({
           </button>
         ))}
       </nav>
-      <div className="flex flex-col gap-1 border-t border-slate-200 pt-1 dark:border-slate-700">
+      <div className="flex flex-col gap-1 border-l border-slate-200 pl-1 dark:border-slate-700 sm:border-l-0 sm:border-t sm:pl-0 sm:pt-1">
         <label className="relative flex size-10 cursor-pointer items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-teal-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100" title="Background Color">
           <span className="sr-only">Background Color</span>
           <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
