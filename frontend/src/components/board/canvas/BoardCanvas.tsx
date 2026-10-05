@@ -8,8 +8,13 @@ import { TEXT_FONT_SIZE } from "@/canvas/renderer/renderer";
 import { useCanvasViewport } from "@/hooks/useCanvasViewport";
 import type { LayerOperation } from "@/editor/layering";
 import { ZoomControls } from "@/components/board/canvas/ZoomControls";
+import { CollaboratorCursors } from "@/components/board/canvas/CollaboratorCursors";
+import { CollaboratorSelections } from "@/components/board/canvas/CollaboratorSelections";
+import { setLocalViewport } from "@/collaboration/presenceStore";
 import type { SketchFlowDocumentV1 } from "@/document/types";
+import type { CanvasSnapshot } from "@/history/types";
 import { applyCrop } from "@/editor/cropping";
+import { rebaseHistorySnapshots } from "@/history/historyOperations";
 import { useBoardCanvasState } from "@/components/board/canvas/state";
 import { useBoardCanvasDrawing } from "@/components/board/canvas/drawing";
 import {
@@ -39,6 +44,15 @@ type BoardCanvasProps = {
   onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
   onAutosave?: () => void;
   onViewportChange?: (viewport: Viewport) => void;
+  onElementCreated?: (element: WhiteboardElement) => void;
+  onElementUpdated?: (element: WhiteboardElement) => void;
+  onElementDeleted?: (elementId: string) => void;
+  onFreehandCreated?: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+  onFreehandDeleted?: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+  onTextContentUpdated?: (elementId: string, text: string) => void;
+  onCursorMove?: (point: Point) => void;
+  boardId: string;
+  remoteSelectionElements: WhiteboardElement[];
 };
 
 export type BoardCanvasHandle = {
@@ -60,6 +74,12 @@ export type BoardCanvasHandle = {
   /** Export the full document as PNG or SVG and trigger a browser download. */
   exportCanvas: (format: "png" | "svg" | "sketchflow", backgroundColor: string, boardName?: string) => void;
   restoreDocument: (doc: SketchFlowDocumentV1) => void;
+  addRemoteElement: (element: WhiteboardElement) => void;
+  addRemoteStroke: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+  deleteRemoteStroke: (stroke: FreehandStroke, strokeIndex?: number) => void;
+  updateRemoteTextContent: (elementId: string, text: string) => void;
+  applyRemoteElementUpdate: (element: WhiteboardElement) => void;
+  deleteRemoteElement: (elementId: string) => void;
   addImage?: (file: File) => void;
   startCrop: () => void;
   /** Get the current document state for autosave */
@@ -69,7 +89,7 @@ export type BoardCanvasHandle = {
 };
 
 export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
-  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onDocumentChange, onAutosave, onViewportChange }, ref) => {
+  ({ activeTool, canvasSettings, onToolSelect, onHistoryChange, onClipboardChange, onDocumentChange, onAutosave, onViewportChange, onElementCreated, onElementUpdated, onElementDeleted, onFreehandCreated, onFreehandDeleted, onTextContentUpdated, onCursorMove, boardId, remoteSelectionElements }, ref) => {
   const state = useBoardCanvasState(activeTool);
   const { canvasRef, textInputRef, textEditor, cropRef, isCropping, setIsCropping } = state;
   const viewportRefHolder = useRef<{ current: Viewport } | null>(null);
@@ -109,7 +129,10 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     fitContentToScreen,
   } = useCanvasViewport({
     canvasRef,
-    onViewportChange,
+    onViewportChange: (viewport) => {
+      setLocalViewport(viewport);
+      onViewportChange?.(viewport);
+    },
     drawCanvas,
     renderZoomedViewport: drawing.renderCanvasViewport,
   });
@@ -119,7 +142,18 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     state,
     viewport: { fitContentToScreen, resetViewport },
     drawing,
-    callbacks: { onDocumentChange, onHistoryChange, onClipboardChange, onAutosave },
+    callbacks: {
+      onDocumentChange,
+      onElementCreated,
+      onElementUpdated,
+      onElementDeleted,
+      onFreehandCreated,
+      onFreehandDeleted,
+      onTextContentUpdated,
+      onHistoryChange,
+      onClipboardChange,
+      onAutosave,
+    },
   });
   const { addHistory, initializeHistory, handleUndo, handleRedo, handleRestoreDocument, getDocumentState, clearDocument } = documentHandlers;
   const creationOptions = createBoardCanvasCreationOptions({
@@ -129,6 +163,7 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     onToolSelect,
     drawCanvas,
     addHistory,
+    onElementCreated,
   });
 
   useEffect(() => {
@@ -147,6 +182,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     state,
     drawCanvas,
     addHistory,
+    onElementCreated,
+    onTextContentUpdated,
     onClipboardChange,
   });
   const {
@@ -160,12 +197,104 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     handlePaste,
     handleDuplicate,
     handleDeleteSelection,
+    handleDeleteElements,
     handleUpdateProperties,
     handleUpdateTextColor,
   } = editingHandlers;
 
   const handleSetSelection = createBoardCanvasSelectionHandler(state, drawCanvas);
   const handleExportCanvas = createBoardCanvasExportHandler({ state, canvasSettings });
+  const withRemoteHistoryRebase = (
+    applyRemoteChange: () => void,
+    rebaseSnapshot: (snapshot: CanvasSnapshot) => CanvasSnapshot,
+  ) => {
+    const localHistory = state.historyRef.current;
+    applyRemoteChange();
+    if (!localHistory) return;
+
+    // Keep collaborator changes in every timeline snapshot without creating local undo actions.
+    const rebasedHistory = rebaseHistorySnapshots(localHistory, rebaseSnapshot);
+    state.historyRef.current = rebasedHistory;
+    onHistoryChange?.(rebasedHistory.undoStack.length > 1, rebasedHistory.redoStack.length > 0);
+  };
+  const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  const addElementToSnapshot = (snapshot: CanvasSnapshot, element: WhiteboardElement) => {
+    if (snapshot.elements.some((current) => current.id === element.id)) return snapshot;
+    const copy = cloneValue(element);
+    snapshot.elements.push(copy);
+    snapshot.creationOrder.push({ kind: "element", value: copy });
+    return snapshot;
+  };
+  const addStrokeToSnapshot = (snapshot: CanvasSnapshot, stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => {
+    const copy = cloneValue(stroke);
+    const index = strokeIndex === undefined ? snapshot.strokes.length : Math.max(0, Math.min(strokeIndex, snapshot.strokes.length));
+    const recordIndex = creationOrderIndex === undefined ? snapshot.creationOrder.length : Math.max(0, Math.min(creationOrderIndex, snapshot.creationOrder.length));
+    snapshot.strokes.splice(index, 0, copy);
+    snapshot.creationOrder.splice(recordIndex, 0, { kind: "stroke", value: copy });
+    return snapshot;
+  };
+  const removeElementFromSnapshot = (snapshot: CanvasSnapshot, elementId: string) => {
+    snapshot.elements = snapshot.elements.filter((element) => element.id !== elementId);
+    snapshot.creationOrder = snapshot.creationOrder.filter((record) => record.kind !== "element" || record.value.id !== elementId);
+    const removedGroupIds = new Set<string>();
+    snapshot.groups = snapshot.groups
+      .map((group) => {
+        const elementIds = group.elementIds.filter((id) => id !== elementId);
+        if (elementIds.length < 2) removedGroupIds.add(group.id);
+        return { ...group, elementIds };
+      })
+      .filter((group) => !removedGroupIds.has(group.id));
+    snapshot.selection = snapshot.selection.filter((selection) =>
+      selection.kind === "element" ? selection.id !== elementId
+        : selection.kind === "group" ? !removedGroupIds.has(selection.id)
+          : true,
+    );
+    return snapshot;
+  };
+  const updateElementInSnapshot = (snapshot: CanvasSnapshot, incomingElement: WhiteboardElement) => {
+    const index = snapshot.elements.findIndex((element) => element.id === incomingElement.id);
+    if (index < 0 || snapshot.elements[index]?.type !== incomingElement.type) return snapshot;
+    const current = snapshot.elements[index]!;
+    const updated = current.type === "text" && incomingElement.type === "text"
+      ? { ...incomingElement, text: current.text }
+      : cloneValue(incomingElement);
+    snapshot.elements[index] = updated;
+    snapshot.creationOrder.forEach((record) => {
+      if (record.kind === "element" && record.value.id === updated.id) record.value = updated;
+    });
+    return snapshot;
+  };
+  const updateTextInSnapshot = (snapshot: CanvasSnapshot, elementId: string, text: string) => {
+    const element = snapshot.elements.find((candidate) => candidate.id === elementId);
+    if (!element || element.type !== "text") return snapshot;
+    element.text = text;
+    snapshot.creationOrder.forEach((record) => {
+      if (record.kind === "element" && record.value.id === elementId && record.value.type === "text") record.value.text = text;
+    });
+    return snapshot;
+  };
+  const removeStrokeFromSnapshot = (snapshot: CanvasSnapshot, stroke: FreehandStroke, preferredIndex?: number) => {
+    const strokeKey = JSON.stringify(stroke);
+    const index = preferredIndex !== undefined
+      && JSON.stringify(snapshot.strokes[preferredIndex]) === strokeKey
+      ? preferredIndex
+      : snapshot.strokes.findIndex((current) => JSON.stringify(current) === strokeKey);
+    if (index < 0) return snapshot;
+    snapshot.strokes.splice(index, 1);
+    let strokeIndex = 0;
+    snapshot.creationOrder = snapshot.creationOrder.filter((record) => {
+      if (record.kind !== "stroke") return true;
+      const keep = strokeIndex !== index;
+      strokeIndex += 1;
+      return keep;
+    });
+    snapshot.selection = snapshot.selection
+      .filter((selection) => selection.kind !== "stroke" || selection.index !== index)
+      .map((selection) => selection.kind === "stroke" && selection.index > index
+        ? { ...selection, index: selection.index - 1 }
+        : selection);
+    return snapshot;
+  };
 
   useImperativeHandle(ref, () => ({
     undo: handleUndo,
@@ -184,7 +313,80 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     unlock: handleUnlock,
     toggleLock: handleToggleLock,
     exportCanvas: handleExportCanvas,
-    restoreDocument: handleRestoreDocument,
+    restoreDocument: (doc) => {
+      handleRestoreDocument(doc);
+      initializeHistory();
+      onHistoryChange?.(false, false);
+    },
+    addRemoteElement: (element) => {
+      if (state.elementsRef.current.some((current) => current.id === element.id)) return;
+
+      withRemoteHistoryRebase(() => {
+        state.elementsRef.current.push(element);
+        state.creationOrderRef.current.push({ kind: "element", value: element });
+        drawCanvas();
+        addHistory(false);
+      }, (snapshot) => addElementToSnapshot(snapshot, element));
+    },
+    addRemoteStroke: (stroke, strokeIndex, creationOrderIndex) => {
+      withRemoteHistoryRebase(() => {
+        const index = strokeIndex === undefined ? state.strokesRef.current.length : Math.max(0, Math.min(strokeIndex, state.strokesRef.current.length));
+        const recordIndex = creationOrderIndex === undefined ? state.creationOrderRef.current.length : Math.max(0, Math.min(creationOrderIndex, state.creationOrderRef.current.length));
+        state.strokesRef.current.splice(index, 0, stroke);
+        state.creationOrderRef.current.splice(recordIndex, 0, { kind: "stroke", value: stroke });
+        drawCanvas();
+        addHistory(false);
+      }, (snapshot) => addStrokeToSnapshot(snapshot, stroke, strokeIndex, creationOrderIndex));
+    },
+    deleteRemoteStroke: (stroke, preferredIndex) => {
+      const strokeIndex = preferredIndex !== undefined
+        && JSON.stringify(state.strokesRef.current[preferredIndex]) === JSON.stringify(stroke)
+        ? preferredIndex
+        : state.strokesRef.current.findIndex((current) => JSON.stringify(current) === JSON.stringify(stroke));
+      if (strokeIndex < 0) return;
+      const currentStroke = state.strokesRef.current[strokeIndex]!;
+      withRemoteHistoryRebase(() => {
+        state.strokesRef.current.splice(strokeIndex, 1);
+        const recordIndex = state.creationOrderRef.current.findIndex((record) => record.kind === "stroke" && record.value === currentStroke);
+        if (recordIndex >= 0) state.creationOrderRef.current.splice(recordIndex, 1);
+        state.selectionRef.current = state.selectionRef.current.filter((selection) => selection.kind !== "stroke" || selection.value !== currentStroke);
+        drawCanvas();
+        addHistory(false);
+      }, (snapshot) => removeStrokeFromSnapshot(snapshot, stroke, preferredIndex));
+    },
+    updateRemoteTextContent: (elementId, text) => {
+      const element = state.elementsRef.current.find((candidate) => candidate.id === elementId);
+      if (!element || element.type !== "text" || element.text === text) return;
+
+      withRemoteHistoryRebase(() => {
+        element.text = text;
+        drawCanvas();
+        addHistory(false);
+      }, (snapshot) => updateTextInSnapshot(snapshot, elementId, text));
+    },
+    applyRemoteElementUpdate: (element) => {
+      const current = state.elementsRef.current.find((candidate) => candidate.id === element.id);
+      if (!current || current.type !== element.type) return;
+
+      const incomingElement = current.type === "text" && element.type === "text"
+        ? { ...element, text: current.text }
+        : element;
+      if (JSON.stringify(current) === JSON.stringify(incomingElement)) return;
+
+      const currentRecord = current as unknown as Record<string, unknown>;
+      for (const key of Object.keys(currentRecord)) {
+        if (!(key in incomingElement)) delete currentRecord[key];
+      }
+      withRemoteHistoryRebase(() => {
+        Object.assign(current, incomingElement);
+        drawCanvas();
+        addHistory(false);
+      }, (snapshot) => updateElementInSnapshot(snapshot, element));
+    },
+    deleteRemoteElement: (elementId) => {
+      if (!state.elementsRef.current.some((element) => element.id === elementId)) return;
+      withRemoteHistoryRebase(() => handleDeleteElements([elementId]), (snapshot) => removeElementFromSnapshot(snapshot, elementId));
+    },
     getDocumentState,
     clearDocument,
     startCrop: () => {
@@ -291,7 +493,13 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
     onToolSelect,
   });
   const { pointerDown, pointerMove, pointerUp } = pointerHandlers;
-  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => pointerMove(event);
+  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    const previousViewport = viewportRef.current;
+    pointerMove(event);
+    const currentViewport = viewportRef.current;
+    if (currentViewport !== previousViewport) onViewportChange?.(currentViewport);
+    onCursorMove?.(toLogicalPoint(getPoint(event)));
+  };
   const stopDrawing = (event: PointerEvent<HTMLCanvasElement>) => pointerUp(event);
   const handlePointerLeave = (event: PointerEvent<HTMLCanvasElement>) => {
     if (activeTool !== "select") stopDrawing(event);
@@ -331,6 +539,8 @@ export const BoardCanvas = forwardRef<BoardCanvasHandle, BoardCanvasProps>(
         onPointerCancel={stopDrawing}
         onPointerLeave={handlePointerLeave}
       />
+      <CollaboratorCursors />
+      <CollaboratorSelections boardId={boardId} elements={remoteSelectionElements} />
       <ZoomControls
         zoom={zoom}
         onZoomIn={() => zoomFromCenter(viewportRef.current.scale + 0.1)}

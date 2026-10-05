@@ -1,4 +1,4 @@
-import type { CanvasSettings, CreationRecord, Group } from "@/types/canvas";
+import type { CanvasSettings, CreationRecord, FreehandStroke, Group, WhiteboardElement } from "@/types/canvas";
 import type { Point, Viewport } from "@/types/geometry";
 import type { SelectionSet, Tool } from "@/types/editor";
 import type { BoardCanvasState } from "../state";
@@ -31,6 +31,7 @@ export function createBoardCanvasCreationOptions(options: {
   onToolSelect: (tool: Tool) => void;
   drawCanvas: () => void;
   addHistory: () => void;
+  onElementCreated?: (element: WhiteboardElement) => void;
 }): CanvasCreationOptions {
   const { state } = options;
   return {
@@ -57,6 +58,7 @@ export function createBoardCanvasCreationOptions(options: {
     onToolSelect: options.onToolSelect,
     drawCanvas: options.drawCanvas,
     addHistory: options.addHistory,
+    onElementCreated: options.onElementCreated,
   };
 }
 
@@ -66,6 +68,12 @@ export function createBoardCanvasDocumentHandlers(options: {
   drawing: Pick<DrawingControls, "drawCanvas" | "renderCanvasViewport">;
   callbacks: {
     onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
+    onElementCreated?: (element: WhiteboardElement) => void;
+    onElementUpdated?: (element: WhiteboardElement) => void;
+    onElementDeleted?: (elementId: string) => void;
+    onFreehandCreated?: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+    onFreehandDeleted?: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+    onTextContentUpdated?: (elementId: string, text: string) => void;
     onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
     onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
     onAutosave?: () => void;
@@ -112,7 +120,9 @@ export function createBoardCanvasDocumentHandlers(options: {
 export function createBoardCanvasEditingHandlers(options: {
   state: BoardCanvasState;
   drawCanvas: () => void;
-  addHistory: () => void;
+  addHistory: (emitCollaborationEvents?: boolean) => void;
+  onElementCreated?: (element: WhiteboardElement) => void;
+  onTextContentUpdated?: (elementId: string, text: string) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
 }) {
   const { state } = options;
@@ -126,6 +136,8 @@ export function createBoardCanvasEditingHandlers(options: {
     duplicateStateRef: state.duplicateStateRef,
     drawCanvas: options.drawCanvas,
     addHistory: options.addHistory,
+    onElementCreated: options.onElementCreated,
+    onTextContentUpdated: options.onTextContentUpdated,
     onClipboardChange: options.onClipboardChange,
   });
 }

@@ -8,6 +8,16 @@ export function canRedo(history: HistoryState): boolean {
   return history.redoStack.length > 0;
 }
 
+export function rebaseHistorySnapshots(
+  history: HistoryState,
+  updateSnapshot: (snapshot: CanvasSnapshot) => CanvasSnapshot,
+): HistoryState {
+  return {
+    undoStack: history.undoStack.map(updateSnapshot),
+    redoStack: history.redoStack.map(updateSnapshot),
+  };
+}
+
 export function undo(history: HistoryState): { newHistory: HistoryState; snapshot: CanvasSnapshot | null } {
   if (!canUndo(history)) {
     return { newHistory: history, snapshot: null };

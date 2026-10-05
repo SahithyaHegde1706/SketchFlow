@@ -43,6 +43,7 @@ export type CanvasCreationOptions = {
   onToolSelect: (tool: Tool) => void;
   drawCanvas: () => void;
   addHistory: () => void;
+  onElementCreated?: (element: WhiteboardElement) => void;
 };
 
 export function beginCanvasCreation(tool: Tool, point: Point, options: CanvasCreationOptions) {
@@ -111,6 +112,7 @@ export function finishCanvasCreation(tool: Tool, options: CanvasCreationOptions)
     if (rectangle && rectangle.width > 0 && rectangle.height > 0) {
       options.elementsRef.current.push(rectangle);
       options.creationOrderRef.current.push({ kind: "element", value: rectangle });
+      options.onElementCreated?.(rectangle);
       createdSelection = { kind: "element", value: rectangle };
     }
     options.activeRectangleRef.current = null;
@@ -120,6 +122,7 @@ export function finishCanvasCreation(tool: Tool, options: CanvasCreationOptions)
     if (circle && circle.width > 0 && circle.height > 0) {
       options.elementsRef.current.push(circle);
       options.creationOrderRef.current.push({ kind: "element", value: circle });
+      options.onElementCreated?.(circle);
       createdSelection = { kind: "element", value: circle };
     }
     options.activeCircleRef.current = null;
@@ -129,6 +132,7 @@ export function finishCanvasCreation(tool: Tool, options: CanvasCreationOptions)
     if (arrow && (arrow.startX !== arrow.endX || arrow.startY !== arrow.endY)) {
       options.elementsRef.current.push(arrow);
       options.creationOrderRef.current.push({ kind: "element", value: arrow });
+      options.onElementCreated?.(arrow);
       createdSelection = { kind: "element", value: arrow };
     }
     options.activeArrowRef.current = null;
@@ -138,6 +142,7 @@ export function finishCanvasCreation(tool: Tool, options: CanvasCreationOptions)
     if (line && (line.startX !== line.endX || line.startY !== line.endY)) {
       options.elementsRef.current.push(line);
       options.creationOrderRef.current.push({ kind: "element", value: line });
+      options.onElementCreated?.(line);
       createdSelection = { kind: "element", value: line };
     }
     options.activeLineRef.current = null;
@@ -147,6 +152,7 @@ export function finishCanvasCreation(tool: Tool, options: CanvasCreationOptions)
     if (rectangle && rectangle.width > 0 && rectangle.height > 0) {
       options.elementsRef.current.push(rectangle);
       options.creationOrderRef.current.push({ kind: "element", value: rectangle });
+      options.onElementCreated?.(rectangle);
       createdSelection = { kind: "element", value: rectangle };
     }
     options.activeRoundedRectangleRef.current = null;
@@ -208,6 +214,7 @@ export function commitText(options: CanvasCreationOptions) {
   };
   options.elementsRef.current.push(textElement);
   options.creationOrderRef.current.push({ kind: "element", value: textElement });
+  options.onElementCreated?.(textElement);
   options.selectionRef.current = [{ kind: "element", value: textElement }];
   options.onToolSelect("select");
   options.drawCanvas();
@@ -255,6 +262,7 @@ export function createImageInsertionHandler(options: CanvasCreationOptions) {
 
         options.elementsRef.current.push(newImage);
         options.creationOrderRef.current.push({ kind: "element", value: newImage });
+        options.onElementCreated?.(newImage);
         options.selectionRef.current = [{ kind: "element", value: newImage }];
         options.onToolSelect("select");
 

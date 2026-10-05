@@ -25,7 +25,9 @@ export type CanvasEditingOptions = {
   clipboardRef: Ref<ClipboardState>;
   duplicateStateRef: Ref<DuplicateState>;
   drawCanvas: () => void;
-  addHistory: () => void;
+  addHistory: (emitCollaborationEvents?: boolean) => void;
+  onElementCreated?: (element: WhiteboardElement) => void;
+  onTextContentUpdated?: (elementId: string, text: string) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
 };
 
@@ -70,6 +72,8 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
     duplicateStateRef,
     drawCanvas,
     addHistory,
+    onElementCreated,
+    onTextContentUpdated,
     onClipboardChange,
   } = options;
 
@@ -163,6 +167,7 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
       if (record.kind === "element") {
         elementsRef.current.push(record.value);
         creationOrderRef.current.push({ kind: "element", value: record.value });
+        onElementCreated?.(record.value);
       } else if (record.kind === "stroke") {
         strokesRef.current.push(record.value);
         creationOrderRef.current.push({ kind: "stroke", value: record.value });
@@ -198,6 +203,7 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
       if (record.kind === "element") {
         elementsRef.current.push(record.value);
         creationOrderRef.current.push({ kind: "element", value: record.value });
+        onElementCreated?.(record.value);
       } else if (record.kind === "stroke") {
         strokesRef.current.push(record.value);
         creationOrderRef.current.push({ kind: "stroke", value: record.value });
@@ -214,8 +220,7 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
     notifyClipboardChange();
   };
 
-  const handleDeleteSelection = () => {
-    const toDelete = selectionRef.current.filter(selection => !isItemLocked(selection, elementsRef.current));
+  const deleteSelections = (toDelete: Selection[], emitCollaborationEvents = true) => {
     if (toDelete.length > 0) {
       const deletedElementIds = new Set<string>();
       const deletedGroupIds = new Set<string>();
@@ -251,8 +256,21 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
         return !deletedGroupIds.has(selection.value.id) && groupsRef.current.some(group => group.id === selection.value.id);
       });
       drawCanvas();
-      addHistory();
+      addHistory(emitCollaborationEvents);
     }
+  };
+
+  const handleDeleteSelection = () => {
+    const toDelete = selectionRef.current.filter(selection => !isItemLocked(selection, elementsRef.current));
+    deleteSelections(toDelete);
+  };
+
+  const handleDeleteElements = (elementIds: string[]) => {
+    const toDelete = elementIds
+      .map((id) => elementsRef.current.find((element) => element.id === id))
+      .filter((element): element is WhiteboardElement => element !== undefined)
+      .map((element) => ({ kind: "element" as const, value: element }));
+    deleteSelections(toDelete, false);
   };
 
   const handleUpdateProperties = (updates: Partial<WhiteboardElement>, commitHistory: boolean = true) => {
@@ -278,10 +296,15 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
     };
 
     let changed = false;
+    const updatedTextContent = new Map<string, string>();
     for (const selection of selectionRef.current) {
       if (selection.kind === "element") {
         if (!isItemLocked(selection.value, elementsRef.current)) {
+          const previousText = selection.value.type === "text" ? selection.value.text : undefined;
           applySafeUpdates(selection.value, updates);
+          if (selection.value.type === "text" && previousText !== selection.value.text) {
+            updatedTextContent.set(selection.value.id, selection.value.text);
+          }
           changed = true;
         }
       } else if (selection.kind === "group") {
@@ -289,7 +312,11 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
           for (const id of selection.value.elementIds) {
             const element = elementsRef.current.find(candidate => candidate.id === id);
             if (element && !element.locked) {
+              const previousText = element.type === "text" ? element.text : undefined;
               applySafeUpdates(element, updates);
+              if (element.type === "text" && previousText !== element.text) {
+                updatedTextContent.set(element.id, element.text);
+              }
               changed = true;
             }
           }
@@ -303,6 +330,7 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
         addHistory();
         resetDuplicateState(duplicateStateRef.current);
       }
+      updatedTextContent.forEach((text, elementId) => onTextContentUpdated?.(elementId, text));
     }
   };
 
@@ -344,6 +372,7 @@ export function createCanvasEditingHandlers(options: CanvasEditingOptions) {
     handlePaste,
     handleDuplicate,
     handleDeleteSelection,
+    handleDeleteElements,
     handleUpdateProperties,
     handleUpdateTextColor,
   };

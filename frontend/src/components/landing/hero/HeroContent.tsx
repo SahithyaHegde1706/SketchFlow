@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { CreateBoardButton } from "./CreateBoardButton";
 
 export function HeroContent() {
   return (
@@ -34,16 +34,7 @@ export function HeroContent() {
 
       {/* Buttons */}
       <div className="flex flex-wrap gap-3 mb-8">
-        <Link
-          href="/board"
-          className="inline-flex items-center gap-1.5 rounded-[12px] bg-teal-600 px-9 py-4.5 text-[17px] font-semibold text-white shadow-sm transition hover:bg-teal-700"
-        >
-          Start Drawing
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" />
-            <path d="m12 5 7 7-7 7" />
-          </svg>
-        </Link>
+        <CreateBoardButton />
       </div>
 
       {/* User avatars */}

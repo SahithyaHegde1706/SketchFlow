@@ -20,6 +20,75 @@ import type { AlignmentGuide } from "@/types/geometry";
 
 type Ref<T> = { current: T };
 
+function hasCollaborativeUpdate(previous: WhiteboardElement, current: WhiteboardElement): boolean {
+  if (previous.type === "text" && current.type === "text") {
+    return JSON.stringify({ ...previous, text: undefined }) !== JSON.stringify({ ...current, text: undefined });
+  }
+
+  return JSON.stringify(previous) !== JSON.stringify(current);
+}
+
+type StrokeEntry = { stroke: FreehandStroke; strokeIndex: number; creationOrderIndex: number };
+
+function getStrokeEntries(snapshot: CanvasSnapshot): StrokeEntry[] {
+  let strokeIndex = 0;
+  return snapshot.creationOrder.flatMap((record, creationOrderIndex) => {
+    if (record.kind !== "stroke") return [];
+    const entry = { stroke: snapshot.strokes[strokeIndex] ?? record.value, strokeIndex, creationOrderIndex };
+    strokeIndex += 1;
+    return [entry];
+  });
+}
+
+function getRemovedStrokes(previous: CanvasSnapshot, current: CanvasSnapshot): StrokeEntry[] {
+  const currentCounts = new Map<string, number>();
+  getStrokeEntries(current).forEach(({ stroke }) => {
+    const key = JSON.stringify(stroke);
+    currentCounts.set(key, (currentCounts.get(key) ?? 0) + 1);
+  });
+  return getStrokeEntries(previous).filter(({ stroke }) => {
+    const key = JSON.stringify(stroke);
+    const count = currentCounts.get(key) ?? 0;
+    if (count === 0) return true;
+    currentCounts.set(key, count - 1);
+    return false;
+  });
+}
+
+function getAddedStrokes(previous: CanvasSnapshot, current: CanvasSnapshot): StrokeEntry[] {
+  return getRemovedStrokes(current, previous);
+}
+
+function emitSnapshotChanges(
+  previous: CanvasSnapshot,
+  current: CanvasSnapshot,
+  callbacks: Pick<CanvasDocumentOptions, "onElementCreated" | "onElementUpdated" | "onElementDeleted" | "onFreehandCreated" | "onFreehandDeleted" | "onTextContentUpdated">,
+) {
+  const previousElements = new Map(previous.elements.map((element) => [element.id, element]));
+  const currentElements = new Map(current.elements.map((element) => [element.id, element]));
+
+  previous.elements.forEach((element) => {
+    if (!currentElements.has(element.id)) callbacks.onElementDeleted?.(element.id);
+  });
+  current.elements.forEach((element) => {
+    const previousElement = previousElements.get(element.id);
+    if (!previousElement) {
+      callbacks.onElementCreated?.(element);
+      return;
+    }
+
+    if (hasCollaborativeUpdate(previousElement, element)) callbacks.onElementUpdated?.(element);
+    if (previousElement.type === "text" && element.type === "text" && previousElement.text !== element.text) {
+      callbacks.onTextContentUpdated?.(element.id, element.text);
+    }
+  });
+
+  getRemovedStrokes(previous, current).forEach(({ stroke, strokeIndex, creationOrderIndex }) =>
+    callbacks.onFreehandDeleted?.(stroke, strokeIndex, creationOrderIndex));
+  getAddedStrokes(previous, current).forEach(({ stroke, strokeIndex, creationOrderIndex }) =>
+    callbacks.onFreehandCreated?.(stroke, strokeIndex, creationOrderIndex));
+}
+
 export type CanvasDocumentOptions = {
   canvasRef: Ref<HTMLCanvasElement | null>;
   strokesRef: Ref<FreehandStroke[]>;
@@ -54,6 +123,12 @@ export type CanvasDocumentOptions = {
   drawCanvas: () => void;
   renderCanvasViewport: () => void;
   onDocumentChange?: (records: CreationRecord[], groups: Group[], selections: SelectionSet) => void;
+  onElementUpdated?: (element: WhiteboardElement) => void;
+  onElementCreated?: (element: WhiteboardElement) => void;
+  onElementDeleted?: (elementId: string) => void;
+  onFreehandCreated?: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+  onFreehandDeleted?: (stroke: FreehandStroke, strokeIndex?: number, creationOrderIndex?: number) => void;
+  onTextContentUpdated?: (elementId: string, text: string) => void;
   onHistoryChange?: (canUndo: boolean, canRedo: boolean) => void;
   onClipboardChange?: (canCopy: boolean, canPaste: boolean, canDuplicate: boolean) => void;
   onAutosave?: () => void;
@@ -94,20 +169,47 @@ export function createCanvasDocumentHandlers(options: CanvasDocumentOptions) {
     drawCanvas,
     renderCanvasViewport,
     onDocumentChange,
+    onElementCreated,
+    onElementUpdated,
+    onElementDeleted,
+    onFreehandCreated,
+    onFreehandDeleted,
+    onTextContentUpdated,
     onHistoryChange,
     onClipboardChange,
     onAutosave,
   } = options;
 
-  const addHistory = () => {
+  const addHistory = (emitCollaborationEvents = true) => {
     if (!historyRef.current) return;
-    historyRef.current = record(
-      historyRef.current,
-      createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current)
-    );
+    const previousSnapshot = historyRef.current.undoStack[historyRef.current.undoStack.length - 1];
+    const previousElements = new Map(previousSnapshot?.elements.map((element) => [element.id, element]));
+    const currentElementIds = new Set(elementsRef.current.map((element) => element.id));
+    const deletedElementIds = emitCollaborationEvents
+      ? [...previousElements.keys()].filter((elementId) => !currentElementIds.has(elementId))
+      : [];
+    const updatedElements = emitCollaborationEvents
+      ? elementsRef.current.filter((element) => {
+          const previous = previousElements.get(element.id);
+          return previous !== undefined && hasCollaborativeUpdate(previous, element);
+        })
+      : [];
+
+    const newSnapshot = createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current);
+    const deletedStrokes = emitCollaborationEvents && previousSnapshot
+      ? getRemovedStrokes(previousSnapshot, newSnapshot)
+      : [];
+    const createdStrokes = emitCollaborationEvents && previousSnapshot
+      ? getAddedStrokes(previousSnapshot, newSnapshot)
+      : [];
+    historyRef.current = record(historyRef.current, newSnapshot);
     onHistoryChange?.(canUndo(historyRef.current), canRedo(historyRef.current));
     onDocumentChange?.(creationOrderRef.current, groupsRef.current, selectionRef.current);
     onAutosave?.();
+    updatedElements.forEach((element) => onElementUpdated?.(element));
+    deletedElementIds.forEach((elementId) => onElementDeleted?.(elementId));
+    deletedStrokes.forEach(({ stroke, strokeIndex, creationOrderIndex }) => onFreehandDeleted?.(stroke, strokeIndex, creationOrderIndex));
+    createdStrokes.forEach(({ stroke, strokeIndex, creationOrderIndex }) => onFreehandCreated?.(stroke, strokeIndex, creationOrderIndex));
   };
 
   const initializeHistory = () => {
@@ -160,10 +262,19 @@ export function createCanvasDocumentHandlers(options: CanvasDocumentOptions) {
 
   const handleUndo = () => {
     if (!historyRef.current) return;
+    const previousSnapshot = createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current);
     const { newHistory, snapshot } = undo(historyRef.current);
     if (snapshot) {
       historyRef.current = newHistory;
       applySnapshot(snapshot);
+      emitSnapshotChanges(previousSnapshot, snapshot, {
+        onElementCreated,
+        onElementUpdated,
+        onElementDeleted,
+        onFreehandCreated,
+        onFreehandDeleted,
+        onTextContentUpdated,
+      });
       resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
       onAutosave?.();
@@ -172,10 +283,19 @@ export function createCanvasDocumentHandlers(options: CanvasDocumentOptions) {
 
   const handleRedo = () => {
     if (!historyRef.current) return;
+    const previousSnapshot = createSnapshot(strokesRef.current, elementsRef.current, creationOrderRef.current, selectionRef.current, groupsRef.current);
     const { newHistory, snapshot } = redo(historyRef.current);
     if (snapshot) {
       historyRef.current = newHistory;
       applySnapshot(snapshot);
+      emitSnapshotChanges(previousSnapshot, snapshot, {
+        onElementCreated,
+        onElementUpdated,
+        onElementDeleted,
+        onFreehandCreated,
+        onFreehandDeleted,
+        onTextContentUpdated,
+      });
       resetDuplicateState(duplicateStateRef.current);
       onHistoryChange?.(canUndo(newHistory), canRedo(newHistory));
       onAutosave?.();
@@ -211,7 +331,7 @@ export function createCanvasDocumentHandlers(options: CanvasDocumentOptions) {
     }
 
     drawCanvas();
-    addHistory();
+    addHistory(false);
   };
 
   const getDocumentState = () => ({

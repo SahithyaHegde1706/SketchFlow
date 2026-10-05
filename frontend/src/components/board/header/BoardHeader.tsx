@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "@/components/ThemeProvider";
 import { SketchFlowLogo } from "@/components/brand/SketchFlowLogo";
+import { CollaboratorPresence } from "@/components/board/header/CollaboratorPresence";
 
 type BoardHeaderProps = {
   boardName: string;
@@ -34,6 +35,7 @@ export function BoardHeader({
 }: BoardHeaderProps) {
   const { theme, toggleTheme } = useTheme();
   const [exportOpen, setExportOpen] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingName, setEditingName] = useState(boardName);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -95,6 +97,16 @@ export function BoardHeader({
     setIsEditing(false);
   };
 
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1800);
+    } catch {
+      window.prompt("Copy this board link", window.location.href);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleSaveName();
@@ -129,6 +141,7 @@ export function BoardHeader({
             {boardName}
           </p>
         )}
+        <CollaboratorPresence />
       </div>
 
       {/* Right: controls */}
@@ -212,6 +225,19 @@ export function BoardHeader({
             <line x1="9" y1="15" x2="15" y2="15" />
           </svg>
           <span className="hidden sm:inline">New</span>
+        </button>
+        <button
+          type="button"
+          onClick={handleShare}
+          aria-label="Copy board link"
+          title={shareCopied ? "Link copied" : "Copy board link"}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+          <span className="hidden sm:inline">{shareCopied ? "Copied" : "Share"}</span>
         </button>
         {/* Export popover */}
         <div ref={exportRef} className="relative">
