@@ -8,6 +8,9 @@ import { Server } from "socket.io";
 
 const port = Number(process.env.PORT) || 4000;
 const allowedOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 
 const app = express();
 app.use(cors({ origin: allowedOrigins }));
